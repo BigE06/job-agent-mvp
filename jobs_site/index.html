@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Agent Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-gray-50 font-sans text-gray-800">
+
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-robot text-blue-600 text-2xl"></i>
+                    <span class="font-bold text-xl tracking-tight text-gray-900">Job Agent</span>
+                </div>
+                <div class="flex space-x-4">
+                    <button id="btn-find-jobs"
+                        class="nav-tab px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600">Find
+                        Jobs</button>
+                    <button id="btn-my-board"
+                        class="nav-tab px-4 py-2 font-medium text-gray-500 hover:text-blue-600 transition">My
+                        Board</button>
+                    <button id="btn-master-profile"
+                        class="nav-tab px-4 py-2 font-medium text-gray-500 hover:text-blue-600 transition">Master
+                        Profile</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+
+        <div id="section-find-jobs" class="tab-section animate-fade-in">
+            <div class="text-center mb-10">
+                <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Find Direct Jobs</h1>
+                <p class="text-gray-500">Search for direct applications. No recruiters. No agencies.</p>
+            </div>
+
+            <div
+                class="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 max-w-3xl mx-auto flex flex-col md:flex-row gap-4">
+                <div
+                    class="flex-grow flex items-center bg-gray-50 rounded-xl px-4 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition">
+                    <i class="fas fa-search text-gray-400 text-lg"></i>
+                    <input id="inp-search-q" type="text" placeholder="Job Title (e.g. Product Manager)"
+                        class="w-full bg-transparent p-3 outline-none text-gray-800 placeholder-gray-400 font-medium">
+                </div>
+
+                <div
+                    class="flex-grow flex items-center bg-gray-50 rounded-xl px-4 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition">
+                    <i class="fas fa-map-marker-alt text-gray-400 text-lg"></i>
+                    <input id="inp-search-loc" type="text" placeholder="Location (e.g. London)"
+                        class="w-full bg-transparent p-3 outline-none text-gray-800 placeholder-gray-400 font-medium">
+                </div>
+
+                <button id="btn-search-universal"
+                    class="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-black transition shadow-md flex items-center justify-center">
+                    Search
+                </button>
+            </div>
+
+            <div id="jobs-container"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12 max-w-7xl mx-auto">
+                <div class="col-span-full text-center py-20 opacity-50">
+                    <i class="fas fa-search text-6xl text-gray-200 mb-4"></i>
+                    <p class="text-gray-400">Enter a role and location to begin your search.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-my-board" class="tab-section hidden">
+            <div class="text-center py-20 bg-white rounded-xl border border-gray-200 border-dashed">
+                <i class="fas fa-columns text-4xl text-gray-300 mb-4"></i>
+                <h2 class="text-2xl font-bold text-gray-400">My Job Board</h2>
+                <p class="text-gray-400">Saved jobs and application statuses will appear here.</p>
+            </div>
+        </div>
+
+        <div id="section-master-profile" class="tab-section hidden animate-fade-in">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Master Profile</h2>
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+
+                <div class="mb-6 p-6 bg-blue-50 border border-blue-100 rounded-lg">
+                    <label class="block text-sm font-bold text-blue-900 mb-2">📄 Upload Resume (PDF)</label>
+                    <div class="flex items-center space-x-4">
+                        <input type="file" id="inp-resume-file" accept=".pdf" class="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-full file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-600 file:text-white
+                            hover:file:bg-blue-700
+                        " />
+                        <button id="btn-upload-resume"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md">
+                            Parse PDF
+                        </button>
+                    </div>
+                    <p class="text-xs text-blue-700 mt-2">Uploading will auto-extract text below.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Extracted Resume Text</label>
+                        <textarea id="inp-resume"
+                            class="w-full h-96 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono leading-relaxed"
+                            placeholder="Or paste text manually here..."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Key Skills (Comma
+                            Separated)</label>
+                        <textarea id="inp-skills"
+                            class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-4"
+                            placeholder="Python, SQL, React..."></textarea>
+
+                        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                            <h4 class="font-bold text-yellow-800 text-sm mb-1">💡 Tip</h4>
+                            <p class="text-xs text-yellow-700">Keep this list updated. The AI uses these specific
+                                keywords to match you against job descriptions.</p>
+                        </div>
+
+                        <button id="btn-save-profile"
+                            class="w-full mt-6 py-3 bg-gray-900 text-white rounded-lg font-bold hover:bg-black transition transform active:scale-95 shadow-lg">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="jobModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                <h3 id="modal-title" class="text-xl font-bold text-gray-900 line-clamp-1">Job Title</h3>
+                <button onclick="document.getElementById('jobModal').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-6">
+
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-bold mb-2">Application Deadline</label>
+                    <div class="flex items-center space-x-2">
+                        <div class="relative flex-1">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fas fa-calendar-alt text-gray-400"></i>
+                            </div>
+                            <input type="date" id="job-deadline"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-colors"
+                                onchange="updateDeadline()">
+                        </div>
+                        <span id="deadline-status" class="text-xs font-bold px-3 py-1 rounded-full hidden"></span>
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                    <label class="block text-xs font-bold text-yellow-800 uppercase mb-2">My Notes</label>
+                    <textarea id="modal-notes"
+                        class="w-full bg-white p-3 rounded border border-yellow-200 text-sm focus:outline-none focus:border-yellow-400"
+                        rows="3" placeholder="Referral contact, salary range, interview date..."></textarea>
+                    <div class="flex justify-end mt-2">
+                        <button id="btn-save-notes"
+                            class="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded font-bold hover:bg-yellow-300 transition">Save
+                            Notes</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Job Description Match</label>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <div class="text-sm text-blue-800 mb-3">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Click <b>"Go to Job"</b>, copy the text, and paste it here.
+                        </div>
+                        <textarea id="modal-description-input"
+                            class="w-full p-3 border border-gray-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Paste job description here..."></textarea>
+
+                        <p id="scroll-hint" class="text-xs text-gray-500 mb-1 hidden">Scroll to read full analysis ↓</p>
+                        <div class="relative">
+                            <div id="analysis-results"
+                                class="p-4 bg-white rounded-lg border-2 border-blue-200 text-sm hidden whitespace-pre-wrap h-80 overflow-y-auto">
+                            </div>
+                            <div id="analysis-fade"
+                                class="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-white to-transparent pointer-events-none rounded-b-lg hidden">
+                            </div>
+                        </div>
+                        <p id="scroll-text" class="text-xs text-gray-400 text-center mt-1 hidden">Scroll for full
+                            analysis</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-between items-center">
+                <a id="modal-source-btn" href="#" target="_blank" class="text-blue-600 font-medium hover:underline">
+                    1. Go to Job <i class="fas fa-external-link-alt text-xs ml-1"></i>
+                </a>
+                <button id="analyze-btn"
+                    class="py-2 px-6 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md transition transform active:scale-95">
+                    2. Analyze Match
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=FIX_NOTES"></script>
+    <div id="cvModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
+            <div class="p-6 border-b border-gray-100 bg-indigo-50 rounded-t-xl flex justify-between items-center">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800">✨ Tailor Your CV</h3>
+                    <p class="text-sm text-gray-600">The AI found a few missing skills. Help us fill the gaps.</p>
+                </div>
+                <button onclick="document.getElementById('cvModal').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div id="cv-interview-content" class="p-6 overflow-y-auto space-y-4 max-h-[60vh]">
+                <div id="cv-loading" class="text-center py-10 hidden">
+                    <i class="fas fa-magic fa-spin text-4xl text-indigo-500 mb-4"></i>
+                    <p class="text-gray-600">Analyzing Job Description vs. Your Profile...</p>
+                </div>
+
+                <div id="cv-questions" class="space-y-6"></div>
+            </div>
+
+            <div class="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end">
+                <button id="btn-generate-cv"
+                    class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg flex items-center">
+                    <span>Generate Tailored CV</span>
+                    <i class="fas fa-arrow-right ml-2"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="interviewModal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-90 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden relative">
+
+            <div class="p-6 bg-indigo-600 text-white flex justify-between items-center">
+                <div>
+                    <h3 class="text-2xl font-bold">🎙️ AI Interview Simulator</h3>
+                    <p class="text-indigo-200 text-sm">Question <span id="q-counter">1</span> of 5</p>
+                </div>
+                <button onclick="closeInterview()" class="text-white hover:text-gray-200">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <div id="interview-chat" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-6"></div>
+
+            <div id="interview-controls" class="p-6 bg-white border-t border-gray-200 flex flex-col items-center">
+                <div id="status-text" class="text-sm text-gray-500 mb-4 h-6">Press microphone to speak...</div>
+
+                <div class="flex gap-4 w-full max-w-2xl">
+                    <button id="btn-mic" onclick="toggleMic()"
+                        class="w-16 h-16 rounded-full bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 transition-all flex items-center justify-center shadow-lg border-2 border-transparent">
+                        <i class="fas fa-microphone text-2xl"></i>
+                    </button>
+
+                    <textarea id="user-response-input"
+                        class="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none resize-y max-h-32 overflow-y-auto"
+                        rows="2" placeholder="Or type your answer here..."></textarea>
+
+                    <button id="btn-send-answer" onclick="handleSend()"
+                        class="w-16 h-16 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg flex items-center justify-center">
+                        <i class="fas fa-paper-plane text-xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="interview-report" class="absolute inset-0 bg-white z-20 hidden flex-col overflow-y-auto">
+                <div class="p-8 max-w-3xl mx-auto w-full">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Interview Analysis</h2>
+
+                    <div class="grid grid-cols-2 gap-8 mb-8">
+                        <div class="bg-gray-50 p-4 rounded-xl">
+                            <canvas id="scoreChart"></canvas>
+                        </div>
+                        <div class="flex flex-col justify-center space-y-4">
+                            <div class="score-card bg-indigo-50 p-4 rounded-lg border-l-4 border-indigo-500">
+                                <h4 class="font-bold text-indigo-900">Overall Verdict</h4>
+                                <p id="report-verdict" class="text-sm text-indigo-700 mt-1">Calculating...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="p-5 border border-green-200 bg-green-50 rounded-xl">
+                            <h4 class="font-bold text-green-800 mb-3"><i class="fas fa-thumbs-up mr-2"></i>Strengths
+                            </h4>
+                            <ul id="report-strengths" class="list-disc pl-5 text-sm text-gray-700 space-y-2"></ul>
+                        </div>
+                        <div class="p-5 border border-red-200 bg-red-50 rounded-xl">
+                            <h4 class="font-bold text-red-800 mb-3"><i
+                                    class="fas fa-exclamation-circle mr-2"></i>Improvements</h4>
+                            <ul id="report-improvements" class="list-disc pl-5 text-sm text-gray-700 space-y-2"></ul>
+                        </div>
+                    </div>
+
+                    <button onclick="closeInterview()"
+                        class="mt-8 w-full py-3 bg-gray-800 text-white rounded-lg font-bold hover:bg-gray-900">
+                        Back to Dashboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="emailModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden">
+            <div class="p-6 bg-teal-600 text-white flex justify-between items-center">
+                <h3 class="text-xl font-bold">📧 Cold Email Draft</h3>
+                <button onclick="document.getElementById('emailModal').classList.add('hidden')"
+                    class="hover:text-teal-200">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Subject</label>
+                    <input id="email-subject" readonly
+                        class="w-full bg-gray-50 border border-gray-300 rounded p-2 text-gray-800 font-medium select-all">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Body</label>
+                    <textarea id="email-body" readonly
+                        class="w-full h-64 bg-gray-50 border border-gray-300 rounded p-3 text-gray-800 text-sm leading-relaxed resize-none select-all"></textarea>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button onclick="copyEmail()"
+                        class="px-6 py-2 bg-teal-600 text-white font-bold rounded hover:bg-teal-700 flex items-center shadow-md">
+                        <i class="fas fa-copy mr-2"></i> Copy All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

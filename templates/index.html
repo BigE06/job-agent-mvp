@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-lg font-medium mb-4">Job Feed</h2>
+<div class="grid gap-3">
+  {% for job, score in rows %}
+  <div class="bg-white rounded-xl shadow p-4">
+    <div class="flex items-start justify-between">
+      <div>
+        <div class="font-semibold">{{ job.title or 'Role' }} — {{ job.company or 'Company' }}</div>
+        <div class="text-sm text-gray-600">{{ job.location or 'Location' }} • Score: {{ '%.2f'|format(score) }}</div>
+      </div>
+      <div class="flex gap-2">
+        <a href="{{ job.url or '#' }}" target="_blank" class="text-sm px-3 py-1 border rounded hover:bg-gray-50">View</a>
+        <button 
+          hx-post="/jobs/{{ job.id }}/tailor" 
+          hx-target="#apply-packet" 
+          hx-swap="innerHTML"
+          class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Prepare</button>
+      </div>
+    </div>
+    <p class="mt-2 text-sm">{{ (job.description or '')[:220] }}{% if (job.description or '')|length > 220 %}…{% endif %}</p>
+  </div>
+  {% endfor %}
+</div>
+
+<div id="apply-packet" class="mt-6"></div>
+{% endblock %}

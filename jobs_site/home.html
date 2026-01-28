@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobAgent.ai | The Unfair Advantage</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --accent: #3b82f6;
+            --dark: #0f172a;
+            --glass: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: #f8fafc;
+            color: var(--dark);
+            overflow-x: hidden;
+        }
+
+        /* --- ANIMATED BACKGROUND --- */
+        .aurora-bg {
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.1), transparent 60%),
+                radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.15), transparent 40%);
+            z-index: -1;
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* --- NAV --- */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 8%;
+            position: fixed;
+            width: 100%;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--primary), #1d4ed8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-btn {
+            background: var(--dark);
+            color: white;
+            padding: 12px 28px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(15, 23, 42, 0.2);
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(15, 23, 42, 0.3);
+        }
+
+        /* --- HERO SPLIT --- */
+        .hero-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 8%;
+            padding-top: 80px;
+            /* offset for nav */
+            gap: 50px;
+        }
+
+        .hero-text {
+            flex: 1;
+            max-width: 600px;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        .badge {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: inline-block;
+            margin-bottom: 24px;
+            border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+
+        h1 {
+            font-size: 4.5rem;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            margin-bottom: 24px;
+            color: var(--dark);
+        }
+
+        h1 span {
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-sub {
+            font-size: 1.25rem;
+            color: #64748b;
+            line-height: 1.6;
+            margin-bottom: 40px;
+            max-width: 90%;
+        }
+
+        .cta-container {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-primary {
+            padding: 18px 42px;
+            background: linear-gradient(135deg, var(--primary), #1d4ed8);
+            color: white;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            box-shadow: 0 10px 30px -10px rgba(37, 99, 235, 0.6);
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px -10px rgba(37, 99, 235, 0.7);
+        }
+
+        /* --- THE FLOATING UI (WOW FACTOR) --- */
+        .hero-visual {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            position: relative;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .glass-card {
+            width: 420px;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid white;
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow:
+                0 20px 50px -10px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+            transform: perspective(1000px) rotateY(-10deg) rotateX(5deg);
+            transition: transform 0.5s;
+        }
+
+        .glass-card:hover {
+            transform: perspective(1000px) rotateY(0deg) rotateX(0deg) scale(1.02);
+        }
+
+        .card-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .skeleton-avatar {
+            width: 50px;
+            height: 50px;
+            background: #e2e8f0;
+            border-radius: 12px;
+        }
+
+        .skeleton-line {
+            height: 10px;
+            background: #e2e8f0;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .skeleton-line.short {
+            width: 60%;
+        }
+
+        .match-badge-lg {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 10px 20px -5px rgba(16, 185, 129, 0.4);
+            margin-top: 20px;
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 900px) {
+            .hero-section {
+                flex-direction: column;
+                text-align: center;
+                padding-top: 120px;
+            }
+
+            .hero-visual {
+                display: none;
+            }
+
+            /* Hide 3D element on mobile for speed */
+            h1 {
+                font-size: 3rem;
+            }
+
+            .cta-container {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="aurora-bg"></div>
+
+    <nav>
+        <div class="logo">JobAgent.ai</div>
+        <a href="/app" class="nav-btn">Launch App</a>
+    </nav>
+
+    <div class="hero-section">
+        <div class="hero-text">
+            <span class="badge">✨ New: Deep Recruiter Radar</span>
+            <h1>Your unfair<br><span>career advantage.</span></h1>
+            <p class="hero-sub">The AI agent that scans the market, calculates your fit, and puts you directly in the
+                inbox of the hiring manager.</p>
+
+            <div class="cta-container">
+                <a href="/app" class="btn-primary">Find Your Next Role</a>
+            </div>
+        </div>
+
+        <div class="hero-visual">
+            <div class="glass-card">
+                <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                    <div style="font-weight:700; color:#0f172a;">Finance Analyst</div>
+                    <div style="color:#64748b;">London</div>
+                </div>
+
+                <div class="card-row">
+                    <div class="skeleton-avatar"></div>
+                    <div style="flex:1">
+                        <div class="skeleton-line" style="margin-bottom:8px;"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+
+                <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-top:20px;">
+                    <div style="font-size:0.8rem; color:#64748b; margin-bottom:5px;">AI Analysis</div>
+                    <div style="font-size:0.95rem; color:#334155; line-height:1.4;">
+                        "You are a strong match for this role based on your Oracle & SAP experience..."
+                    </div>
+                </div>
+
+                <div class="match-badge-lg">
+                    <span>⚡ 98% Match Score</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

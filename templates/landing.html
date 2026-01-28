@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobAgent AI | Your Job Search on Autopilot</title>
+    <meta name="description"
+        content="The AI-powered job search assistant that finds, tailors, and tracks your applications automatically.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* Mesh gradient blob */
+        .mesh-gradient {
+            position: absolute;
+            top: -20%;
+            right: -10%;
+            width: 60%;
+            height: 80%;
+            background: radial-gradient(circle at 30% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(236, 72, 153, 0.1) 0%, transparent 40%),
+                radial-gradient(circle at 50% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+            filter: blur(60px);
+            pointer-events: none;
+        }
+
+        /* Premium card hover */
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Button lift effect */
+        .btn-lift {
+            transition: all 0.2s ease;
+        }
+
+        .btn-lift:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Text gradient */
+        .text-gradient {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Subtle grid pattern */
+        .grid-pattern {
+            background-image:
+                linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+
+<body class="bg-white text-gray-900 antialiased">
+
+    <!-- Mesh gradient background -->
+    <div class="mesh-gradient"></div>
+
+    <!-- Navigation -->
+    <nav class="relative z-10 px-6 py-6">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-bolt text-white text-sm"></i>
+                </div>
+                <span class="text-xl font-bold tracking-tight">JobAgent</span>
+            </div>
+            <a href="/app" class="text-sm font-medium text-gray-600 hover:text-gray-900 transition">
+                Open App →
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="relative z-10 px-6 pt-16 pb-32">
+        <div class="max-w-6xl mx-auto">
+
+            <!-- Badge -->
+            <div class="flex justify-center mb-8">
+                <div
+                    class="inline-flex items-center px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
+                    <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                    Powered by Agentic AI
+                </div>
+            </div>
+
+            <!-- Headline -->
+            <div class="text-center max-w-4xl mx-auto">
+                <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1] mb-6">
+                    Your Job Search.
+                    <span class="block text-gradient">Autopilot.</span>
+                </h1>
+
+                <p class="text-xl md:text-2xl text-gray-500 font-normal max-w-2xl mx-auto mb-12 leading-relaxed">
+                    The AI agent that discovers opportunities, tailors your CV,
+                    and tracks applications — so you can focus on interviewing.
+                </p>
+
+                <!-- CTA Buttons -->
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+                    <a href="/app"
+                        class="btn-lift px-8 py-4 bg-gray-900 text-white font-semibold rounded-2xl text-lg shadow-xl">
+                        Get Started Free
+                        <i class="fas fa-arrow-right ml-2"></i>
+                    </a>
+                    <span class="text-sm text-gray-400">No credit card required</span>
+                </div>
+            </div>
+
+            <!-- App Preview Card -->
+            <div class="max-w-4xl mx-auto">
+                <div class="card-hover bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+                    <!-- Fake Browser Chrome -->
+                    <div class="bg-gray-50 border-b border-gray-100 px-4 py-3 flex items-center">
+                        <div class="flex space-x-2">
+                            <div class="w-3 h-3 bg-red-400 rounded-full"></div>
+                            <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                            <div class="w-3 h-3 bg-green-400 rounded-full"></div>
+                        </div>
+                        <div class="flex-1 flex justify-center">
+                            <div
+                                class="bg-white border border-gray-200 rounded-lg px-4 py-1 text-xs text-gray-400 w-64 text-center">
+                                localhost:8000/app
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kanban Preview -->
+                    <div class="p-8 bg-gradient-to-br from-gray-50 to-white">
+                        <div class="grid grid-cols-4 gap-4">
+                            <!-- Column: Saved -->
+                            <div class="bg-blue-50 rounded-2xl p-4">
+                                <div class="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wide">Saved</div>
+                                <div class="space-y-2">
+                                    <div class="bg-white rounded-xl p-3 shadow-sm border border-blue-100">
+                                        <div class="font-semibold text-sm">Senior Engineer</div>
+                                        <div class="text-xs text-gray-500">Google</div>
+                                    </div>
+                                    <div class="bg-white rounded-xl p-3 shadow-sm border border-blue-100">
+                                        <div class="font-semibold text-sm">ML Lead</div>
+                                        <div class="text-xs text-gray-500">OpenAI</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Column: Applied -->
+                            <div class="bg-yellow-50 rounded-2xl p-4">
+                                <div class="text-xs font-bold text-yellow-600 mb-3 uppercase tracking-wide">Applied
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="bg-white rounded-xl p-3 shadow-sm border border-yellow-100">
+                                        <div class="font-semibold text-sm">Tech Lead</div>
+                                        <div class="text-xs text-gray-500">Stripe</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Column: Interview -->
+                            <div class="bg-purple-50 rounded-2xl p-4">
+                                <div class="text-xs font-bold text-purple-600 mb-3 uppercase tracking-wide">Interview
+                                </div>
+                                <div class="space-y-2">
+                                    <div
+                                        class="bg-white rounded-xl p-3 shadow-sm border border-purple-200 ring-2 ring-purple-200">
+                                        <div class="font-semibold text-sm">Data Scientist</div>
+                                        <div class="text-xs text-gray-500">Meta</div>
+                                        <div class="text-xs text-purple-600 mt-1 font-medium">Tomorrow 2PM</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Column: Offer -->
+                            <div class="bg-green-50 rounded-2xl p-4">
+                                <div class="text-xs font-bold text-green-600 mb-3 uppercase tracking-wide">Offer 🎉
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="bg-white rounded-xl p-3 shadow-sm border border-green-200">
+                                        <div class="font-semibold text-sm">Staff Engineer</div>
+                                        <div class="text-xs text-gray-500">Anthropic</div>
+                                        <div class="text-xs text-green-600 mt-1 font-bold">$350K TC</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Features Section -->
+    <section class="relative z-10 px-6 py-24 bg-gray-50 grid-pattern">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold tracking-tight mb-4">
+                    Everything you need to land your dream job
+                </h2>
+                <p class="text-xl text-gray-500 max-w-2xl mx-auto">
+                    One platform to discover, apply, and prepare — all powered by AI.
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="card-hover bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-6">
+                        <i class="fas fa-search text-blue-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Smart Discovery</h3>
+                    <p class="text-gray-500 leading-relaxed">
+                        AI scans thousands of job boards and direct company pages to surface roles that match your exact
+                        skills.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="card-hover bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-6">
+                        <i class="fas fa-file-alt text-purple-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">1-Click CV Tailoring</h3>
+                    <p class="text-gray-500 leading-relaxed">
+                        Generate perfectly tailored, ATS-optimized CVs for each application in seconds, not hours.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="card-hover bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-6">
+                        <i class="fas fa-microphone text-pink-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Interview Simulator</h3>
+                    <p class="text-gray-500 leading-relaxed">
+                        Practice with AI mock interviews tailored to your target role, company, and seniority level.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="relative z-10 px-6 py-20 bg-white">
+        <div class="max-w-4xl mx-auto">
+            <div class="grid grid-cols-3 gap-8 text-center">
+                <div>
+                    <div class="text-5xl font-extrabold text-gradient mb-2">10x</div>
+                    <div class="text-gray-500 font-medium">Faster Applications</div>
+                </div>
+                <div>
+                    <div class="text-5xl font-extrabold text-gradient mb-2">85%</div>
+                    <div class="text-gray-500 font-medium">More Interviews</div>
+                </div>
+                <div>
+                    <div class="text-5xl font-extrabold text-gradient mb-2">24/7</div>
+                    <div class="text-gray-500 font-medium">AI Working For You</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="relative z-10 px-6 py-24 bg-gray-900 text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl md:text-5xl font-bold tracking-tight mb-6">
+                Ready to put your job search on autopilot?
+            </h2>
+            <p class="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
+                Join thousands of professionals who landed their dream roles with JobAgent AI.
+            </p>
+            <a href="/app"
+                class="inline-flex items-center px-10 py-5 bg-white text-gray-900 font-bold rounded-2xl text-lg hover:bg-gray-100 transition shadow-2xl">
+                <i class="fas fa-rocket mr-3"></i>
+                Launch JobAgent
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="px-6 py-8 bg-gray-900 border-t border-gray-800">
+        <div class="max-w-6xl mx-auto flex justify-between items-center text-sm text-gray-500">
+            <div>© 2024 JobAgent AI. All rights reserved.</div>
+            <div class="flex space-x-6">
+                <a href="#" class="hover:text-white transition">Privacy</a>
+                <a href="#" class="hover:text-white transition">Terms</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>
