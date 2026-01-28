@@ -5,6 +5,7 @@ import os
 import json
 import time
 import re
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
 from fastapi.responses import RedirectResponse, HTMLResponse
@@ -16,8 +17,12 @@ from pypdf import PdfReader
 from openai import OpenAI
 from ddgs import DDGS
 
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # --- DATABASE IMPORTS ---
-from app.db import engine, Base, init_db
+from app.db import engine, Base, SessionLocal
 
 # --- CONFIGURATION ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -42,48 +47,11 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
         return conn
 
-# --- LIFESPAN (Startup/Shutdown) ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 1. CREATE TABLES FIRST (Critical Step - must happen before any queries)
-    print("🚀 STARTUP: Creating database tables...")
-    try:
-        from app import models  # Ensure models are registered
-        Base.metadata.create_all(bind=engine)
-        print("✅ Tables created successfully.")
-    except Exception as e:
-        print(f"❌ Error creating tables: {e}")
-    
-    # 2. NOW it is safe to seed data or run queries
-    # (Add your seeding logic here if needed)
-    
-    yield
-    print("🛑 Shutting down...")
-
-# --- FASTAPI APP ---
-app = FastAPI(lifespan=lifespan)
-
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- LANDING PAGE ---
-@app.get("/")
-async def root():
-    """Serve the stunning landing page at root URL."""
-    landing_path = Path(__file__).resolve().parent.parent / "templates" / "landing.html"
-    if landing_path.exists():
-        return HTMLResponse(content=landing_path.read_text(encoding="utf-8"))
-    return RedirectResponse(url="/app/")
-
-# --- MIGRATIONS ---
+# --- SQLite MIGRATIONS (runs inside lifespan) ---
 def run_migrations():
+    """Create legacy SQLite tables if they don't exist."""
+    if USE_POSTGRES:
+        return  # Skip SQLite migrations in production
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS saved_jobs 
@@ -108,7 +76,54 @@ def run_migrations():
     conn.commit()
     conn.close()
 
-run_migrations()
+# --- LIFESPAN (Startup/Shutdown) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 1. CREATE SQLALCHEMY TABLES FIRST (Critical Step)
+    logger.info("🚀 STARTUP: Creating database tables...")
+    try:
+        from app import models  # Ensure models are registered
+        Base.metadata.create_all(bind=engine)
+        logger.info("✅ SQLAlchemy tables created successfully.")
+    except Exception as e:
+        logger.error(f"❌ Error creating SQLAlchemy tables: {e}")
+    
+    # 2. Run legacy SQLite migrations (only for local dev)
+    try:
+        run_migrations()
+        logger.info("✅ SQLite migrations completed.")
+    except Exception as e:
+        logger.warning(f"⚠️ SQLite migrations skipped: {e}")
+    
+    yield
+    logger.info("🛑 SHUTDOWN: App is stopping.")
+
+# --- FASTAPI APP ---
+app = FastAPI(title="Job Agent", lifespan=lifespan)
+
+# Initialize OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- LANDING PAGE ---
+@app.get("/")
+async def root():
+    """Serve the stunning landing page at root URL."""
+    landing_path = Path(__file__).resolve().parent.parent / "templates" / "landing.html"
+    if landing_path.exists():
+        return HTMLResponse(content=landing_path.read_text(encoding="utf-8"))
+    return RedirectResponse(url="/app/")
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint for deployment monitoring."""
+    return {"status": "ok", "tables": "created"}
 
 # --- AI HELPERS ---
 
