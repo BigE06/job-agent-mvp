@@ -15,6 +15,28 @@ from pypdf import PdfReader
 from openai import OpenAI
 from ddgs import DDGS
 
+# In app/main.py
+
+# ... imports ...
+from app.db import engine, Base  # Make sure 'Base' is imported from your db or models file
+from app import models          # Import your models so SQLAlchemy knows about them
+
+# Add this function BEFORE 'app = FastAPI()'
+def create_tables():
+    print("Checking/Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    print("Tables created successfully.")
+
+# Initialize the app with a lifespan (startup event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_tables()  # <--- THIS IS THE FIX
+    # ... your existing startup logic (like seeding) ...
+    yield
+    # ... shutdown logic ...
+
+app = FastAPI(lifespan=lifespan)
+
 # --- CONFIGURATION ---
 # ⚠️ PASTE YOUR KEYS HERE (or use environment variables) ⚠️
 import os
