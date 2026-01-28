@@ -5,6 +5,7 @@ import os
 import json
 import time
 import re
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,63 +16,55 @@ from pypdf import PdfReader
 from openai import OpenAI
 from ddgs import DDGS
 
-# In app/main.py
-
-# ... imports ...
-from app.db import engine, Base  # Make sure 'Base' is imported from your db or models file
-from app import models          # Import your models so SQLAlchemy knows about them
-
-# Add this function BEFORE 'app = FastAPI()'
-def create_tables():
-    print("Checking/Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    print("Tables created successfully.")
-
-# Initialize the app with a lifespan (startup event)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_tables()  # <--- THIS IS THE FIX
-    # ... your existing startup logic (like seeding) ...
-    yield
-    # ... shutdown logic ...
-
-app = FastAPI(lifespan=lifespan)
+# --- DATABASE IMPORTS ---
+from app.db import engine, Base, init_db
 
 # --- CONFIGURATION ---
-# ⚠️ PASTE YOUR KEYS HERE (or use environment variables) ⚠️
-import os
-# ... other imports ...
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GOOGLE_CX_ID = os.getenv("GOOGLE_CX_ID", "")
 
-# DELETE the hardcoded key line. Replace with:
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# --- DATABASE CONFIGURATION ---
-# Supports PostgreSQL in production via DATABASE_URL, defaults to SQLite locally
+# Database URL for PostgreSQL support
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 USE_POSTGRES = DATABASE_URL.startswith("postgres")
-
-# For SQLite (local development)
 DB_PATH = "jobs.db"
 
 def get_db_connection():
     """Get database connection. Supports both SQLite (local) and PostgreSQL (production)."""
     if USE_POSTGRES:
-        # For PostgreSQL, we'd use psycopg2 or asyncpg
-        # Note: Requires `pip install psycopg2-binary` for production
         import psycopg2
         from psycopg2.extras import RealDictCursor
-        # Fix Heroku-style postgres:// -> postgresql://
         db_url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
         conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
         return conn
     else:
-        # SQLite for local development
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         return conn
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# --- LIFESPAN (Startup/Shutdown) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 1. CREATE TABLES FIRST (Critical Step - must happen before any queries)
+    print("🚀 STARTUP: Creating database tables...")
+    try:
+        from app import models  # Ensure models are registered
+        Base.metadata.create_all(bind=engine)
+        print("✅ Tables created successfully.")
+    except Exception as e:
+        print(f"❌ Error creating tables: {e}")
+    
+    # 2. NOW it is safe to seed data or run queries
+    # (Add your seeding logic here if needed)
+    
+    yield
+    print("🛑 Shutting down...")
 
-app = FastAPI()
+# --- FASTAPI APP ---
+app = FastAPI(lifespan=lifespan)
+
+# Initialize OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 app.add_middleware(
     CORSMiddleware,
