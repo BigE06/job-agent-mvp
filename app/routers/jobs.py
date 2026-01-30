@@ -6,13 +6,14 @@ from datetime import datetime
 from typing import Any, Dict, List
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select, or_
 
 from app.db import SessionLocal
 from app.models import JobPost
+from app.services.scraper import run_scraper
 
 router = APIRouter()
 
@@ -207,3 +208,31 @@ def tailor(job_id: str, db: Session = Depends(get_db)) -> HTMLResponse:
 </html>"""
 
     return HTMLResponse(body, status_code=200)
+
+
+# --- ON-DEMAND SCRAPER ---
+@router.post("/jobs/scrape")
+def trigger_scrape(background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    """
+    Trigger job scraping in the background.
+    Returns immediately while scraper runs asynchronously.
+    """
+    background_tasks.add_task(run_scraper)
+    return {
+        "message": "Scraping started",
+        "status": "background_task_queued",
+        "note": "Check /jobs endpoint in a few seconds for new listings"
+    }
+
+
+@router.post("/jobs/scrape-sync")
+def trigger_scrape_sync() -> Dict[str, Any]:
+    """
+    Trigger job scraping synchronously (for testing).
+    Waits for scraper to complete before returning.
+    """
+    result = run_scraper()
+    return {
+        "message": "Scraping complete",
+        **result
+    }
