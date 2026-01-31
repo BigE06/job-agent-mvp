@@ -1,27 +1,240 @@
-{% extends 'base.html' %}
-{% block content %}
-<h2 class="text-lg font-medium mb-4">Job Feed</h2>
-<div class="grid gap-3">
-  {% for job, score in rows %}
-  <div class="bg-white rounded-xl shadow p-4">
-    <div class="flex items-start justify-between">
-      <div>
-        <div class="font-semibold">{{ job.title or 'Role' }} — {{ job.company or 'Company' }}</div>
-        <div class="text-sm text-gray-600">{{ job.location or 'Location' }} • Score: {{ '%.2f'|format(score) }}</div>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Agent | Your AI-Powered Job Board</title>
+  <meta name="description" content="Browse AI-curated job listings and apply with one click.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .card-hover {
+      transition: all 0.2s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
+          <i class="fas fa-bolt text-white"></i>
+        </div>
+        <span class="text-xl font-bold">JobAgent</span>
       </div>
-      <div class="flex gap-2">
-        <a href="{{ job.url or '#' }}" target="_blank" class="text-sm px-3 py-1 border rounded hover:bg-gray-50">View</a>
-        <button 
-          hx-post="/jobs/{{ job.id }}/tailor" 
-          hx-target="#apply-packet" 
-          hx-swap="innerHTML"
-          class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Prepare</button>
+      <div class="flex items-center space-x-4">
+        <button onclick="loadJobs()" class="text-sm text-gray-600 hover:text-gray-900">
+          <i class="fas fa-sync-alt mr-1"></i> Refresh
+        </button>
+        <button onclick="triggerScrape()"
+          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+          <i class="fas fa-search mr-1"></i> Scrape New Jobs
+        </button>
       </div>
     </div>
-    <p class="mt-2 text-sm">{{ (job.description or '')[:220] }}{% if (job.description or '')|length > 220 %}…{% endif %}</p>
-  </div>
-  {% endfor %}
-</div>
+  </header>
 
-<div id="apply-packet" class="mt-6"></div>
-{% endblock %}
+  <!-- Main Content -->
+  <main class="max-w-6xl mx-auto px-6 py-8">
+
+    <!-- Stats Bar -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Job Listings</h1>
+        <p id="job-count" class="text-gray-500 text-sm">Loading...</p>
+      </div>
+      <div class="flex items-center space-x-2 text-sm text-gray-500">
+        <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full">
+          <i class="fas fa-check-circle mr-1"></i> API Connected
+        </span>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="text-center py-16">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-4"></i>
+      <p class="text-gray-500">Loading jobs...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error" class="hidden text-center py-16">
+      <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+      <p class="text-gray-700 font-medium">Failed to load jobs</p>
+      <p id="error-message" class="text-gray-500 text-sm mt-2"></p>
+      <button onclick="loadJobs()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
+        Try Again
+      </button>
+    </div>
+
+    <!-- Jobs Grid -->
+    <div id="jobs-container" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Jobs will be inserted here -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty" class="hidden text-center py-16">
+      <i class="fas fa-briefcase text-4xl text-gray-300 mb-4"></i>
+      <p class="text-gray-700 font-medium">No jobs found</p>
+      <p class="text-gray-500 text-sm mt-2">Click "Scrape New Jobs" to fetch listings</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center py-8 text-gray-400 text-sm">
+    &copy; 2024 JobAgent AI. All rights reserved.
+  </footer>
+
+  <script>
+    // =============================================
+    // JOB AGENT - FRONTEND SCRIPT
+    // =============================================
+
+    const API_BASE = ''; // Empty = relative URLs (works on localhost AND production)
+
+    // --- Load Jobs from API ---
+    async function loadJobs() {
+      console.log('🔍 Fetching jobs...');
+
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const container = document.getElementById('jobs-container');
+      const empty = document.getElementById('empty');
+      const countEl = document.getElementById('job-count');
+
+      // Reset states
+      loading.classList.remove('hidden');
+      error.classList.add('hidden');
+      container.classList.add('hidden');
+      empty.classList.add('hidden');
+
+      try {
+        const response = await fetch(`${API_BASE}/jobs`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // API returns a LIST directly, not { jobs: [...] }
+        const jobs = await response.json();
+        console.log('✅ Jobs received:', jobs);
+
+        loading.classList.add('hidden');
+
+        if (!Array.isArray(jobs) || jobs.length === 0) {
+          empty.classList.remove('hidden');
+          countEl.textContent = '0 jobs found';
+          return;
+        }
+
+        // Render jobs
+        container.innerHTML = '';
+        jobs.forEach(job => {
+          container.innerHTML += createJobCard(job);
+        });
+
+        container.classList.remove('hidden');
+        countEl.textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''} found`;
+
+      } catch (err) {
+        console.error('❌ Error:', err);
+        loading.classList.add('hidden');
+        error.classList.remove('hidden');
+        document.getElementById('error-message').textContent = err.message;
+      }
+    }
+
+    // --- Create Job Card HTML ---
+    function createJobCard(job) {
+      const title = escapeHtml(job.title || 'Untitled Position');
+      const company = escapeHtml(job.company || 'Unknown Company');
+      const location = escapeHtml(job.location || 'Location not specified');
+      const url = job.url || '#';
+      const source = escapeHtml(job.source || 'Manual');
+      const isRemote = job.is_remote;
+      const salaryMin = job.salary_min;
+      const salaryMax = job.salary_max;
+
+      // Format salary
+      let salaryText = '';
+      if (salaryMin && salaryMax) {
+        salaryText = `$${(salaryMin / 1000).toFixed(0)}K - $${(salaryMax / 1000).toFixed(0)}K`;
+      } else if (salaryMin) {
+        salaryText = `From $${(salaryMin / 1000).toFixed(0)}K`;
+      }
+
+      return `
+                <div class="card-hover bg-white rounded-xl border border-gray-200 p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                            ${company.charAt(0).toUpperCase()}
+                        </div>
+                        ${isRemote ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Remote</span>' : ''}
+                    </div>
+                    
+                    <h3 class="font-semibold text-gray-900 text-lg mb-1 line-clamp-2">${title}</h3>
+                    <p class="text-blue-600 font-medium mb-2">${company}</p>
+                    <p class="text-gray-500 text-sm mb-4">
+                        <i class="fas fa-map-marker-alt mr-1"></i> ${location}
+                    </p>
+                    
+                    ${salaryText ? `<p class="text-green-600 font-semibold text-sm mb-4"><i class="fas fa-dollar-sign mr-1"></i> ${salaryText}</p>` : ''}
+                    
+                    <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                        <span class="text-xs text-gray-400">${source}</span>
+                        <a href="${url}" target="_blank" rel="noopener" 
+                           class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
+                            Apply Now <i class="fas fa-external-link-alt ml-1"></i>
+                        </a>
+                    </div>
+                </div>
+            `;
+    }
+
+    // --- Trigger Scraper ---
+    async function triggerScrape() {
+      console.log('🔍 Triggering scraper...');
+
+      try {
+        const response = await fetch(`${API_BASE}/jobs/scrape-sync`, { method: 'POST' });
+        const result = await response.json();
+        console.log('✅ Scrape result:', result);
+
+        alert(`Scraping complete!\nAdded: ${result.added || 0} jobs\nSkipped: ${result.skipped || 0} duplicates`);
+        loadJobs(); // Refresh the list
+
+      } catch (err) {
+        console.error('❌ Scrape error:', err);
+        alert('Failed to scrape. Check console for details.');
+      }
+    }
+
+    // --- Escape HTML to prevent XSS ---
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // --- Load jobs on page load ---
+    document.addEventListener('DOMContentLoaded', loadJobs);
+  </script>
+
+</body>
+
+</html>
