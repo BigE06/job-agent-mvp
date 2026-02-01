@@ -212,26 +212,36 @@ def tailor(job_id: str, db: Session = Depends(get_db)) -> HTMLResponse:
 
 # --- ON-DEMAND SCRAPER ---
 @router.post("/jobs/scrape")
-def trigger_scrape(background_tasks: BackgroundTasks) -> Dict[str, Any]:
+def trigger_scrape(
+    background_tasks: BackgroundTasks,
+    query: str = "AI Engineer"
+) -> Dict[str, Any]:
     """
     Trigger job scraping in the background.
     Returns immediately while scraper runs asynchronously.
+    
+    Args:
+        query: Search query (default: "AI Engineer")
     """
-    background_tasks.add_task(run_scraper)
+    background_tasks.add_task(run_scraper, query)
     return {
         "message": "Scraping started",
         "status": "background_task_queued",
+        "query": query,
         "note": "Check /jobs endpoint in a few seconds for new listings"
     }
 
 
 @router.post("/jobs/scrape-sync")
-def trigger_scrape_sync() -> Dict[str, Any]:
+def trigger_scrape_sync(query: str = "AI Engineer") -> Dict[str, Any]:
     """
     Trigger job scraping synchronously (for testing).
     Waits for scraper to complete before returning.
+    
+    Args:
+        query: Search query (default: "AI Engineer")
     """
-    result = run_scraper()
+    result = run_scraper(query)
     return {
         "message": "Scraping complete",
         **result
