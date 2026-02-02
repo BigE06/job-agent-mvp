@@ -15,6 +15,7 @@ from app.models import JobPost
 
 # Import Routers
 from app.routers import jobs as jobs_router
+from app.routers import features as features_router
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +66,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 app.include_router(jobs_router.router)
+app.include_router(features_router.router)
 
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
