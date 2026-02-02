@@ -10,7 +10,7 @@ from uuid import uuid4
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 from app.db import SessionLocal
 from app.models import JobPost
