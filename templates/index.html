@@ -35,6 +35,10 @@
     .cv-preview {
       font-family: 'Times New Roman', serif;
     }
+
+    .status-badge {
+      transition: all 0.15s ease;
+    }
   </style>
 </head>
 
@@ -148,7 +152,7 @@
   </div>
 
   <!-- ======================== -->
-  <!-- RESULT MODAL (Email/CV/Interview) -->
+  <!-- RESULT MODAL (Email/CV/Interview/Cover Letter) -->
   <!-- ======================== -->
   <div id="result-modal" class="fixed inset-0 z-50 hidden">
     <div class="modal-backdrop absolute inset-0 bg-black/40" onclick="closeResultModal()"></div>
@@ -223,6 +227,16 @@
       }
     }
 
+    // --- Status Colors ---
+    const statusColors = {
+      'new': 'bg-blue-100 text-blue-700',
+      'saved': 'bg-gray-100 text-gray-700',
+      'applied': 'bg-green-100 text-green-700',
+      'interviewing': 'bg-purple-100 text-purple-700',
+      'offer': 'bg-yellow-100 text-yellow-700',
+      'rejected': 'bg-red-100 text-red-700',
+    };
+
     // --- Create Job Card HTML ---
     function createJobCard(job, index) {
       const title = escapeHtml(job.title || 'Untitled');
@@ -234,6 +248,8 @@
       const salaryMin = job.salary_min;
       const salaryMax = job.salary_max;
       const jobId = job.id;
+      const status = (job.status || 'new').toLowerCase();
+      const statusColor = statusColors[status] || statusColors['new'];
 
       let salaryText = '';
       if (salaryMin && salaryMax) {
@@ -241,7 +257,7 @@
       }
 
       return `
-                <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden" data-job-id="${jobId}">
                     <div class="p-5">
                         <div class="flex items-start justify-between mb-3">
                             <div class="w-11 h-11 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
@@ -256,30 +272,66 @@
                         <h3 class="font-semibold text-gray-900 text-lg mb-1 leading-tight">${title}</h3>
                         <p class="text-blue-600 font-medium text-sm mb-1">${company}</p>
                         <p class="text-gray-500 text-sm mb-2"><i class="fas fa-map-marker-alt mr-1 text-gray-400"></i>${location}</p>
-                        ${salaryText ? `<p class="text-green-600 font-semibold text-sm"><i class="fas fa-dollar-sign mr-1"></i>${salaryText}</p>` : ''}
+                        ${salaryText ? `<p class="text-green-600 font-semibold text-sm mb-2"><i class="fas fa-dollar-sign mr-1"></i>${salaryText}</p>` : ''}
+                        
+                        <!-- Status Badge -->
+                        <div class="flex items-center space-x-2 mt-3">
+                            <select id="status-${jobId}" onchange="updateJobStatus('${jobId}', this.value)" class="status-badge px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer ${statusColor}">
+                                <option value="new" ${status === 'new' ? 'selected' : ''}>🆕 New</option>
+                                <option value="saved" ${status === 'saved' ? 'selected' : ''}>📌 Saved</option>
+                                <option value="applied" ${status === 'applied' ? 'selected' : ''}>✅ Applied</option>
+                                <option value="interviewing" ${status === 'interviewing' ? 'selected' : ''}>🎤 Interviewing</option>
+                                <option value="offer" ${status === 'offer' ? 'selected' : ''}>🎉 Offer</option>
+                                <option value="rejected" ${status === 'rejected' ? 'selected' : ''}>❌ Rejected</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <!-- Action Bar -->
                     <div class="bg-gray-50 px-5 py-3 border-t border-gray-100">
-                        <div class="flex items-center justify-between">
-                            <div class="flex space-x-2">
-                                <button onclick="draftEmail('${jobId}')" id="btn-email-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
-                                    <i class="fas fa-envelope mr-1"></i> Email
-                                </button>
-                                <button onclick="tailorCV('${jobId}')" id="btn-cv-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
-                                    <i class="fas fa-file-alt mr-1"></i> CV
-                                </button>
-                                <button onclick="startInterview('${jobId}')" id="btn-interview-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
-                                    <i class="fas fa-microphone mr-1"></i> Prep
-                                </button>
-                            </div>
-                            <a href="${url}" target="_blank" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition">
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <button onclick="draftEmail('${jobId}')" id="btn-email-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                <i class="fas fa-envelope mr-1"></i> Email
+                            </button>
+                            <button onclick="generateCoverLetter('${jobId}')" id="btn-cover-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                <i class="fas fa-file-signature mr-1"></i> Cover Letter
+                            </button>
+                            <button onclick="tailorCV('${jobId}')" id="btn-cv-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                <i class="fas fa-file-alt mr-1"></i> CV
+                            </button>
+                            <button onclick="startInterview('${jobId}')" id="btn-interview-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                <i class="fas fa-microphone mr-1"></i> Prep
+                            </button>
+                        </div>
+                        <div class="flex justify-end">
+                            <a href="${url}" target="_blank" class="px-4 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition">
                                 Apply <i class="fas fa-external-link-alt ml-1"></i>
                             </a>
                         </div>
                     </div>
                 </div>
             `;
+    }
+
+    // --- Update Job Status ---
+    async function updateJobStatus(jobId, status) {
+      const select = document.getElementById(`status-${jobId}`);
+      const statusColor = statusColors[status] || statusColors['new'];
+
+      // Update visual immediately
+      select.className = `status-badge px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer ${statusColor}`;
+
+      // Update in database (if it's a saved job)
+      try {
+        await fetch('/api/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: jobId, status: status })
+        });
+        console.log(`✅ Status updated: ${jobId} -> ${status}`);
+      } catch (err) {
+        console.log('Status update skipped (job not in saved_jobs)');
+      }
     }
 
     // --- Draft Cold Email ---
@@ -298,7 +350,7 @@
         const data = await res.json();
         console.log('Email result:', data);
 
-        if (data.error) {
+        if (data.error && data.error !== "Parsing failed") {
           showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
         } else {
           const subject = escapeHtml(data.subject || 'No subject');
@@ -313,6 +365,43 @@
                             <label class="block text-sm font-medium text-gray-500 mb-1">Body</label>
                             <div class="bg-gray-50 rounded-lg p-4 text-gray-800 leading-relaxed">${body}</div>
                         </div>
+                    `);
+        }
+      } catch (err) {
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-loading');
+      }
+    }
+
+    // --- Generate Cover Letter ---
+    async function generateCoverLetter(jobId) {
+      const btn = document.getElementById(`btn-cover-${jobId}`);
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...';
+      btn.classList.add('btn-loading');
+
+      try {
+        const res = await fetch('/api/generate-cover-letter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        });
+        const data = await res.json();
+        console.log('Cover letter result:', data);
+
+        if (data.error && !data.full_letter) {
+          showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+        } else {
+          const letter = data.full_letter || `${data.greeting || ''}\n\n${data.body || ''}\n\n${data.closing || ''}`;
+          currentResultText = letter;
+          const formattedLetter = escapeHtml(letter).replace(/\n/g, '<br>');
+          showResult('📝 Cover Letter', `
+                        <div class="bg-gray-50 rounded-lg p-6 text-gray-800 leading-relaxed whitespace-pre-wrap">
+                            ${formattedLetter}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle mr-1"></i> Copy and paste into your application.</p>
                     `);
         }
       } catch (err) {
@@ -402,7 +491,7 @@
       try {
         const res = await fetch(`/jobs/scrape-sync?query=${encodeURIComponent(query)}`, { method: 'POST' });
         const data = await res.json();
-        alert(`✅ Scraping complete!\nAdded: ${data.added || 0}\nSkipped: ${data.skipped || 0}`);
+        alert(`✅ Scraping complete!\nAdded: ${data.added || 0}\nSkipped: ${data.skipped || 0}\nSource: ${data.source || 'Unknown'}`);
         loadJobs();
       } catch (err) {
         alert('❌ Scraping failed: ' + err.message);

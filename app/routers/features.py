@@ -2,7 +2,8 @@
 Features Router
 ---------------
 AI-powered endpoints for job application assistance.
-Migrated from main_backup.py with SQLAlchemy models.
+Supports both SQLAlchemy JobPost model and legacy SQLite saved_jobs.
+Includes auto-enrichment for short descriptions.
 """
 from __future__ import annotations
 
@@ -10,16 +11,21 @@ import io
 import json
 import uuid
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, UploadFile, File
 from pypdf import PdfReader
 
 from app.services.ai import get_gpt_response
+from app.services.scraper import scrape_job_details
 from app.db import SessionLocal
+from app.models import JobPost
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["AI Features"])
+
+# Minimum description length for AI features to work well
+MIN_DESCRIPTION_LENGTH = 500
 
 
 # --- Helper: Get Legacy DB Connection (for SQLite tables) ---
@@ -30,6 +36,86 @@ def get_legacy_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_job_by_id(job_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a job by ID from either PostgreSQL (job_posts) or SQLite (saved_jobs).
+    Returns a unified job dict or None.
+    """
+    # Try PostgreSQL first (job_posts table)
+    db = SessionLocal()
+    try:
+        job = db.query(JobPost).filter(JobPost.id == job_id).first()
+        if job:
+            return {
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "url": job.url,
+                "description": job.description,
+                "source": "job_posts",
+            }
+    finally:
+        db.close()
+    
+    # Fallback to SQLite saved_jobs
+    try:
+        conn = get_legacy_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            job = dict(row)
+            job["source"] = "saved_jobs"
+            job["description"] = job.get("notes", "")  # saved_jobs uses notes
+            return job
+    except Exception as e:
+        logger.warning(f"SQLite lookup failed: {e}")
+    
+    return None
+
+
+def enrich_if_needed(job: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Check if job description is too short and enrich it via deep scraping.
+    Updates the database with the full description if successful.
+    """
+    description = job.get("description") or ""
+    url = job.get("url", "")
+    
+    if len(description) >= MIN_DESCRIPTION_LENGTH:
+        logger.info(f"Description already sufficient ({len(description)} chars)")
+        return job
+    
+    if not url:
+        logger.warning("Cannot enrich: job has no URL")
+        return job
+    
+    logger.info(f"📡 Description too short ({len(description)} chars), deep scraping...")
+    
+    full_description = scrape_job_details(url)
+    
+    if full_description and len(full_description) > len(description):
+        job["description"] = full_description
+        
+        # Update database
+        if job.get("source") == "job_posts":
+            db = SessionLocal()
+            try:
+                db_job = db.query(JobPost).filter(JobPost.id == job["id"]).first()
+                if db_job:
+                    db_job.description = full_description
+                    db.commit()
+                    logger.info(f"✅ Updated job_posts with {len(full_description)} chars")
+            finally:
+                db.close()
+    else:
+        logger.warning("Deep scrape did not return more content")
+    
+    return job
 
 
 # =============================================
@@ -50,7 +136,6 @@ async def upload_resume(file: UploadFile = File(...)):
         user_prompt = f"RESUME: {text[:4000]}\n\nTask: Return comma-separated list of top 15 skills."
         extracted_skills = get_gpt_response(system_prompt, user_prompt, max_tokens=100)
         
-        # Save to profile table
         conn = get_legacy_db()
         c = conn.cursor()
         c.execute("SELECT id FROM profile LIMIT 1")
@@ -92,6 +177,273 @@ async def analyze_text(data: dict = Body(...)):
 
 
 # =============================================
+# GENERATE COVER LETTER (NEW)
+# =============================================
+@router.post("/generate-cover-letter")
+async def generate_cover_letter(data: dict = Body(...)):
+    """Generate a professional cover letter for a job."""
+    job_id = data.get('job_id')
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Enrich description if needed
+    job = enrich_if_needed(job)
+    
+    conn = get_legacy_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM profile LIMIT 1")
+    profile_row = c.fetchone()
+    profile = dict(profile_row) if profile_row else {}
+    conn.close()
+    
+    resume_text = profile.get('resume_text', '')
+    if not resume_text:
+        raise HTTPException(status_code=400, detail="No resume uploaded. Please upload your resume first.")
+    
+    job_description = job.get('description', '') or f"Role: {job.get('title')} at {job.get('company')}"
+    
+    system_prompt = """You are an expert career coach writing professional cover letters.
+
+RULES:
+1. Format as a proper cover letter with greeting, 3-4 body paragraphs, and closing.
+2. Opening paragraph: Express enthusiasm for the specific role and company.
+3. Body paragraphs: Connect the candidate's SPECIFIC experiences to job requirements.
+4. Include 1-2 quantifiable achievements from their background.
+5. Closing: Strong call-to-action expressing desire for an interview.
+6. Tone: Professional, confident, and genuine.
+7. Length: 300-400 words.
+8. Do NOT use generic filler. Every sentence should add value.
+
+Return JSON: {"greeting": "...", "body": "...", "closing": "...", "full_letter": "..."}"""
+
+    user_prompt = f"""JOB DETAILS:
+Title: {job.get('title', 'Role')}
+Company: {job.get('company', 'Company')}
+Description: {job_description[:3000]}
+
+CANDIDATE RESUME:
+{resume_text[:4000]}
+
+Generate a tailored cover letter as JSON."""
+
+    result = get_gpt_response(system_prompt, user_prompt, json_mode=True, max_tokens=1200)
+    
+    try:
+        parsed = json.loads(result)
+        return parsed
+    except json.JSONDecodeError:
+        return {"full_letter": result, "error": "Parsing failed"}
+
+
+# =============================================
+# GENERATE COLD EMAIL (with auto-enrichment)
+# =============================================
+@router.post("/generate-cold-email")
+async def generate_cold_email(data: dict = Body(...)):
+    """Generate a high-conversion cold email to a hiring manager."""
+    job_id = data.get('job_id')
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Enrich if needed
+    job = enrich_if_needed(job)
+    
+    conn = get_legacy_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM profile LIMIT 1")
+    profile_row = c.fetchone()
+    profile = dict(profile_row) if profile_row else {}
+    conn.close()
+    
+    job_context = f"Title: {job.get('title', 'Unknown')}\nCompany: {job.get('company', 'Unknown')}\nDescription: {(job.get('description') or '')[:1500]}"
+    resume_text = profile.get('resume_text', '')
+    skills = profile.get('skills', '')
+    
+    system_prompt = """You are a career strategist. Write a concise cold email (max 150 words) to a Hiring Manager.
+
+RULES:
+1. Subject line must be catchy and specific to the role.
+2. Opening line must hook - no generic "I hope this email finds you well".
+3. Body must connect the candidate's specific skills to the company's needs.
+4. Include ONE impressive metric or achievement from their background.
+5. End with a clear, low-pressure call to action.
+6. Tone: Professional but confident.
+7. Do NOT use placeholders like '[Your Name]' - use 'Candidate' or leave a generic signature.
+
+Return JSON: {"subject": "...", "body": "..."}"""
+
+    user_prompt = f"""JOB TARGET:
+{job_context}
+
+CANDIDATE PROFILE:
+{resume_text[:3000]}
+
+KEY SKILLS: {skills}
+
+Generate the cold email as JSON."""
+
+    result = get_gpt_response(system_prompt, user_prompt, json_mode=True, max_tokens=400)
+    
+    try:
+        parsed = json.loads(result)
+        return parsed
+    except json.JSONDecodeError:
+        return {"subject": "Regarding the Open Position", "body": result, "error": "Parsing failed"}
+
+
+# =============================================
+# GENERATE CURATED CV (with auto-enrichment)
+# =============================================
+@router.post("/generate-curated-cv")
+async def generate_curated_cv(data: dict = Body(...)):
+    """Generate a tailored CV with Harvard Style CSS. Auto-enriches job description if needed."""
+    job_id = data.get('job_id')
+    gap_answers = data.get('gap_answers', [])
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Enrich if needed for better AI context
+    job = enrich_if_needed(job)
+    
+    conn = get_legacy_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM profile LIMIT 1")
+    profile_row = c.fetchone()
+    profile = dict(profile_row) if profile_row else {}
+    conn.close()
+    
+    resume_text = profile.get('resume_text', '')
+    if not resume_text:
+        raise HTTPException(status_code=400, detail="No resume uploaded.")
+    
+    job_description = job.get('description', '') or f"{job.get('title', '')} at {job.get('company', '')}"
+    
+    system_prompt = """You are a Resume Formatting Engine. Output ONLY raw HTML code.
+DO NOT use markdown code blocks (no ```html).
+
+YOUR ONLY GOAL is to take the user's raw resume text and format it into a clean, professional HTML structure.
+
+CRITICAL RULES - READ CAREFULLY:
+1. DO NOT SUMMARIZE. DO NOT PARAPHRASE. DO NOT SHORTEN.
+2. COPY the 'Experience' section EXACTLY as it appears in the source text.
+   - If the user lists 5 roles, you MUST output all 5 roles.
+   - If a role has 10 bullet points, you MUST output all 10 bullet points.
+   - Copy the exact wording. Do not "improve" or "tailor" the bullets.
+3. CRITICAL SORTING RULE: You MUST re-order the 'Experience' section in REVERSE CHRONOLOGICAL ORDER.
+   - Start with the CURRENT or MOST RECENT job first (e.g., "2024-Present").
+   - Then list the previous job, and so on.
+4. COPY the 'Education' section EXACTLY as it appears (reverse chronological order).
+5. COPY the 'Skills' section EXACTLY as it appears, but you may reorder to prioritize job-relevant skills.
+6. The ONLY section you are allowed to WRITE YOURSELF is the 'Professional Profile' summary at the top, which should be 2-3 sentences tailored to the Job Description.
+
+OUTPUT STRUCTURE:
+1. Header (Name, Contact Info from source)
+2. Professional Profile (YOU WRITE THIS - tailored to the job)
+3. Skills (From source, reordered for relevance)
+4. Experience (VERBATIM COPY from source - ALL roles, ALL bullets - REVERSE CHRONOLOGICAL ORDER)
+5. Education (VERBATIM COPY from source - REVERSE CHRONOLOGICAL ORDER)
+
+CSS Rules (Harvard Style):
+- @page { margin: 0; }
+- body { font-family: 'Times New Roman', serif; margin: 1in; color: #000; line-height: 1.4; }
+- h1 { text-align: center; text-transform: uppercase; font-size: 20pt; margin-bottom: 5px; }
+- .contact-info { text-align: center; font-size: 10pt; margin-bottom: 20px; }
+- h2 { text-transform: uppercase; font-size: 11pt; border-bottom: 1px solid #000; margin-top: 15px; margin-bottom: 8px; }
+- .job-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 11pt; margin-top: 12px; }
+- .job-sub { display: flex; justify-content: space-between; font-style: italic; font-size: 11pt; margin-bottom: 2px; }
+- ul { margin: 0; padding-left: 18px; }
+- li { margin-bottom: 2px; font-size: 11pt; }"""
+
+    user_prompt = f"""
+TARGET JOB: {job.get('title', 'Role')} at {job.get('company', 'Company')}
+JOB DESCRIPTION: {job_description[:3000]}
+
+=== SOURCE RESUME (COPY EXPERIENCE & EDUCATION VERBATIM) ===
+{resume_text[:6000]}
+
+=== GAP SKILLS TO INTEGRATE INTO PROFILE SUMMARY ===
+{json.dumps(gap_answers)}
+
+REMINDER: The Experience and Education sections must be copied WORD-FOR-WORD from the source resume above. Only the Professional Profile summary should be written by you.
+"""
+    
+    raw_html = get_gpt_response(system_prompt, user_prompt, max_tokens=4000)
+    clean_html = raw_html.replace("```html", "").replace("```", "").strip()
+    
+    return {"cv_html": clean_html}
+
+
+# =============================================
+# GAP FILL INTERVIEW (with auto-enrichment)
+# =============================================
+@router.post("/gap-fill-interview")
+async def gap_fill_interview(data: dict = Body(...)):
+    """Identify missing skills between resume and job description."""
+    job_id = data.get('job_id')
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Enrich if needed
+    job = enrich_if_needed(job)
+    
+    conn = get_legacy_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM profile LIMIT 1")
+    profile_row = c.fetchone()
+    profile = dict(profile_row) if profile_row else {}
+    conn.close()
+    
+    resume_text = profile.get('resume_text', '')
+    if not resume_text:
+        raise HTTPException(status_code=400, detail="No resume uploaded. Please upload your resume first.")
+    
+    job_description = job.get('description', '') or f"{job.get('title', '')} at {job.get('company', '')}"
+    
+    system_prompt = """You are a strict Skills Gap Analyzer. Your job is to identify ONLY genuine missing skills.
+
+RULES:
+1. EXPLICIT GAPS: Skills explicitly stated in the job that are completely absent from the resume.
+2. IMPLICIT GAPS: Skills strongly implied by the job (e.g., "Cloud architecture") where the resume has NO related experience.
+3. DO NOT hallucinate. If unsure, do not include the skill.
+4. Ignore soft skills like "communication" or "teamwork" unless they are a core job requirement.
+5. Return 3-7 skills maximum. Quality over quantity.
+6. Return ONLY valid JSON. No explanations."""
+
+    user_prompt = f"""JOB DESCRIPTION:
+Title: {job.get('title', 'Unknown')}
+Company: {job.get('company', 'Unknown')}
+Full Description: {job_description[:3000]}
+
+CANDIDATE RESUME:
+{resume_text[:4000]}
+
+Task: Identify skills the candidate is MISSING for this role.
+Return JSON: {{"missing_skills": ["Skill1", "Skill2"], "job_title": "Title from JD"}}"""
+
+    result = get_gpt_response(system_prompt, user_prompt, json_mode=True, max_tokens=300)
+    
+    try:
+        parsed = json.loads(result)
+        return parsed
+    except json.JSONDecodeError:
+        return {"missing_skills": [], "job_title": job.get('title', 'Unknown'), "error": "AI parsing failed"}
+
+
+# =============================================
 # GENERATE PACK (Cold Email + Strategy)
 # =============================================
 @router.post("/generate-pack")
@@ -130,208 +482,6 @@ Do NOT include physical addresses, dates, formal headers, or 'Dear Sir/Madam'.""
 
 
 # =============================================
-# GAP FILL INTERVIEW (Identify Missing Skills)
-# =============================================
-@router.post("/gap-fill-interview")
-async def gap_fill_interview(data: dict = Body(...)):
-    """Identify missing skills between resume and job description."""
-    job_id = data.get('job_id')
-    if not job_id:
-        raise HTTPException(status_code=400, detail="job_id is required")
-    
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    c.execute("SELECT * FROM profile LIMIT 1")
-    profile_row = c.fetchone()
-    profile = dict(profile_row) if profile_row else {}
-    conn.close()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job_context = f"Title: {job.get('title', 'Unknown')}\nCompany: {job.get('company', 'Unknown')}"
-    resume_text = profile.get('resume_text', '')
-    
-    if not resume_text:
-        raise HTTPException(status_code=400, detail="No resume uploaded. Please upload your resume first.")
-    
-    system_prompt = """You are a strict Skills Gap Analyzer. Your job is to identify ONLY genuine missing skills.
-
-RULES:
-1. EXPLICIT GAPS: Skills explicitly stated in the job that are completely absent from the resume.
-2. IMPLICIT GAPS: Skills strongly implied by the job (e.g., "Cloud architecture") where the resume has NO related experience.
-3. DO NOT hallucinate. If unsure, do not include the skill.
-4. Ignore soft skills like "communication" or "teamwork" unless they are a core job requirement.
-5. Return 3-7 skills maximum. Quality over quantity.
-6. Return ONLY valid JSON. No explanations."""
-
-    user_prompt = f"""JOB DESCRIPTION:
-{job_context}
-
-CANDIDATE RESUME:
-{resume_text[:4000]}
-
-Task: Identify skills the candidate is MISSING for this role.
-Return JSON: {{"missing_skills": ["Skill1", "Skill2"], "job_title": "Title from JD"}}"""
-
-    result = get_gpt_response(system_prompt, user_prompt, json_mode=True, max_tokens=300)
-    
-    try:
-        parsed = json.loads(result)
-        return parsed
-    except json.JSONDecodeError:
-        return {"missing_skills": [], "job_title": job.get('title', 'Unknown'), "error": "AI parsing failed"}
-
-
-# =============================================
-# GENERATE CURATED CV (Harvard Style HTML)
-# =============================================
-@router.post("/generate-curated-cv")
-async def generate_curated_cv(data: dict = Body(...)):
-    """Generate a tailored CV with injected gap answers. Uses Harvard Style CSS."""
-    job_id = data.get('job_id')
-    gap_answers = data.get('gap_answers', [])
-    
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    c.execute("SELECT * FROM profile LIMIT 1")
-    profile_row = c.fetchone()
-    profile = dict(profile_row) if profile_row else {}
-    conn.close()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    resume_text = profile.get('resume_text', '')
-    if not resume_text:
-        raise HTTPException(status_code=400, detail="No resume uploaded.")
-    
-    system_prompt = """You are a Resume Formatting Engine. Output ONLY raw HTML code.
-DO NOT use markdown code blocks (no ```html).
-
-YOUR ONLY GOAL is to take the user's raw resume text and format it into a clean, professional HTML structure.
-
-CRITICAL RULES - READ CAREFULLY:
-1. DO NOT SUMMARIZE. DO NOT PARAPHRASE. DO NOT SHORTEN.
-2. COPY the 'Experience' section EXACTLY as it appears in the source text.
-   - If the user lists 5 roles, you MUST output all 5 roles.
-   - If a role has 10 bullet points, you MUST output all 10 bullet points.
-   - Copy the exact wording. Do not "improve" or "tailor" the bullets.
-3. CRITICAL SORTING RULE: You MUST re-order the 'Experience' section in REVERSE CHRONOLOGICAL ORDER.
-   - Start with the CURRENT or MOST RECENT job first (e.g., "2024-Present").
-   - Then list the previous job, and so on (e.g., "2019-2022" comes after "2022-2024").
-   - Do NOT list them in the order they appear in the source text if it is incorrect.
-   - Check the dates carefully to determine the correct order.
-4. COPY the 'Education' section EXACTLY as it appears (also in reverse chronological order if multiple entries).
-5. COPY the 'Skills' section EXACTLY as it appears, but you may reorder to prioritize job-relevant skills.
-6. The ONLY section you are allowed to WRITE YOURSELF is the 'Professional Profile' summary at the top, which should be 2-3 sentences tailored to the Job Description.
-
-OUTPUT STRUCTURE:
-1. Header (Name, Contact Info from source)
-2. Professional Profile (YOU WRITE THIS - tailored to the job)
-3. Skills (From source, reordered for relevance)
-4. Experience (VERBATIM COPY from source - ALL roles, ALL bullets - REVERSE CHRONOLOGICAL ORDER)
-5. Education (VERBATIM COPY from source - REVERSE CHRONOLOGICAL ORDER)
-
-CSS Rules (Harvard Style):
-- @page { margin: 0; }
-- body { font-family: 'Times New Roman', serif; margin: 1in; color: #000; line-height: 1.4; }
-- h1 { text-align: center; text-transform: uppercase; font-size: 20pt; margin-bottom: 5px; }
-- .contact-info { text-align: center; font-size: 10pt; margin-bottom: 20px; }
-- h2 { text-transform: uppercase; font-size: 11pt; border-bottom: 1px solid #000; margin-top: 15px; margin-bottom: 8px; }
-- .job-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 11pt; margin-top: 12px; }
-- .job-sub { display: flex; justify-content: space-between; font-style: italic; font-size: 11pt; margin-bottom: 2px; }
-- ul { margin: 0; padding-left: 18px; }
-- li { margin-bottom: 2px; font-size: 11pt; }"""
-
-    user_prompt = f"""
-TARGET JOB: {job.get('title', 'Role')} at {job.get('company', 'Company')}
-JOB DESCRIPTION: {job.get('snippet', '')}
-
-=== SOURCE RESUME (COPY EXPERIENCE & EDUCATION VERBATIM) ===
-{resume_text[:6000]}
-
-=== GAP SKILLS TO INTEGRATE INTO PROFILE SUMMARY ===
-{json.dumps(gap_answers)}
-
-REMINDER: The Experience and Education sections must be copied WORD-FOR-WORD from the source resume above. Only the Professional Profile summary should be written by you.
-"""
-    
-    # Get AI Response (4000 tokens for complete CV generation)
-    raw_html = get_gpt_response(system_prompt, user_prompt, max_tokens=4000)
-    
-    # Clean markdown tags
-    clean_html = raw_html.replace("```html", "").replace("```", "").strip()
-    
-    return {"cv_html": clean_html}
-
-
-# =============================================
-# GENERATE COLD EMAIL (Standalone)
-# =============================================
-@router.post("/generate-cold-email")
-async def generate_cold_email(data: dict = Body(...)):
-    """Generate a high-conversion cold email to a hiring manager."""
-    job_id = data.get('job_id')
-    if not job_id:
-        raise HTTPException(status_code=400, detail="job_id is required")
-    
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    c.execute("SELECT * FROM profile LIMIT 1")
-    profile_row = c.fetchone()
-    profile = dict(profile_row) if profile_row else {}
-    conn.close()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job_context = f"Title: {job.get('title', 'Unknown')}\nCompany: {job.get('company', 'Unknown')}"
-    resume_text = profile.get('resume_text', '')
-    skills = profile.get('skills', '')
-    
-    system_prompt = """You are a career strategist. Write a concise cold email (max 150 words) to a Hiring Manager.
-
-RULES:
-1. Subject line must be catchy and specific to the role.
-2. Opening line must hook - no generic "I hope this email finds you well".
-3. Body must connect the candidate's specific skills to the company's needs.
-4. Include ONE impressive metric or achievement from their background.
-5. End with a clear, low-pressure call to action.
-6. Tone: Professional but confident.
-7. Do NOT use placeholders like '[Your Name]' - use 'Candidate' or leave a generic signature.
-
-Return JSON: {"subject": "...", "body": "..."}"""
-
-    user_prompt = f"""JOB TARGET:
-{job_context}
-
-CANDIDATE PROFILE:
-{resume_text[:3000]}
-
-KEY SKILLS: {skills}
-
-Generate the cold email as JSON."""
-
-    result = get_gpt_response(system_prompt, user_prompt, json_mode=True, max_tokens=400)
-    
-    try:
-        parsed = json.loads(result)
-        return parsed
-    except json.JSONDecodeError:
-        return {"subject": "Regarding the Open Position", "body": result, "error": "Parsing failed"}
-
-
-# =============================================
 # VOICE INTERVIEW SIMULATOR
 # =============================================
 @router.post("/interview/start")
@@ -341,13 +491,7 @@ async def interview_start(data: dict = Body(...)):
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    conn.close()
-    
+    job = get_job_by_id(str(job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
@@ -374,23 +518,15 @@ async def interview_chat(data: dict = Body(...)):
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    # Check if interview is complete (5 turns = 10 messages)
     if len(history) >= 10:
         return {"question": None, "message": "Interview Complete. Generating Report..."}
     
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    conn.close()
-    
+    job = get_job_by_id(str(job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
     job_context = f"{job.get('title', 'Role')} at {job.get('company', 'Company')}"
     
-    # Build conversation for OpenAI
     formatted_history = ""
     for msg in history:
         role = "Interviewer" if msg.get('role') == 'ai' else "Candidate"
@@ -429,19 +565,12 @@ async def interview_report(data: dict = Body(...)):
     if len(history) < 2:
         raise HTTPException(status_code=400, detail="Not enough conversation to analyze")
     
-    conn = get_legacy_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-    job_row = c.fetchone()
-    job = dict(job_row) if job_row else None
-    conn.close()
-    
+    job = get_job_by_id(str(job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
     job_context = f"{job.get('title', 'Role')} at {job.get('company', 'Company')}"
     
-    # Build conversation transcript
     transcript = ""
     for msg in history:
         role = "Interviewer" if msg.get('role') == 'ai' else "Candidate"
@@ -489,6 +618,35 @@ Analyze and return the JSON report."""
 
 
 # =============================================
+# DEEP SCRAPE ENDPOINT (Manual trigger)
+# =============================================
+@router.post("/enrich-job")
+async def enrich_job(data: dict = Body(...)):
+    """Manually trigger deep scraping for a job to get full description."""
+    job_id = data.get('job_id')
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    original_len = len(job.get("description") or "")
+    
+    # Force enrich
+    job["description"] = ""  # Force re-scrape
+    enriched = enrich_if_needed(job)
+    
+    new_len = len(enriched.get("description") or "")
+    
+    return {
+        "status": "success" if new_len > original_len else "no_change",
+        "original_chars": original_len,
+        "new_chars": new_len,
+    }
+
+
+# =============================================
 # CRUD OPERATIONS (Save/Get/Delete Jobs)
 # =============================================
 @router.post("/save-job")
@@ -533,7 +691,7 @@ async def get_saved_jobs():
     jobs = []
     for row in rows:
         job = dict(row)
-        job['link'] = job.get('url', '')  # Alias for frontend
+        job['link'] = job.get('url', '')
         jobs.append(job)
     
     return {"jobs": jobs}

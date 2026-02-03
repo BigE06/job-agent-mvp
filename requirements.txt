@@ -11,3 +11,4 @@ python-multipart==0.0.9
 openai==1.52.0
 duckduckgo-search>=6.0.0
 pypdf>=3.0.0
+beautifulsoup4>=4.12.0
