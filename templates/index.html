@@ -67,6 +67,46 @@
     .tab-inactive:hover {
       color: #374151;
     }
+
+    /* Heart button styles */
+    .heart-btn {
+      transition: all 0.2s ease;
+    }
+
+    .heart-btn:hover {
+      transform: scale(1.1);
+    }
+
+    .heart-btn.saved {
+      color: #ef4444;
+    }
+
+    /* Kanban column styles */
+    .kanban-column {
+      min-height: 400px;
+    }
+
+    .kanban-card {
+      transition: all 0.15s ease;
+    }
+
+    .kanban-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .move-btn {
+      transition: all 0.15s ease;
+    }
+
+    .move-btn:hover:not(:disabled) {
+      background-color: #e5e7eb;
+    }
+
+    .move-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 
@@ -121,18 +161,18 @@
 
     <!-- Tabs -->
     <div class="flex items-center space-x-6 border-b border-gray-200 mb-6">
-      <button id="tab-new" onclick="switchTab('new')" class="pb-3 px-1 font-medium text-sm tab-active">
-        <i class="fas fa-search mr-2"></i> New Search
+      <button id="tab-feed" onclick="switchTab('feed')" class="pb-3 px-1 font-medium text-sm tab-active">
+        <i class="fas fa-rss mr-2"></i> Job Feed
       </button>
-      <button id="tab-saved" onclick="switchTab('saved')" class="pb-3 px-1 font-medium text-sm tab-inactive">
-        <i class="fas fa-folder mr-2"></i> Saved & Applied
+      <button id="tab-kanban" onclick="switchTab('kanban')" class="pb-3 px-1 font-medium text-sm tab-inactive">
+        <i class="fas fa-columns mr-2"></i> My Applications
       </button>
     </div>
 
     <!-- Stats Bar -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 id="page-title" class="text-2xl font-bold text-gray-900">Job Dashboard</h1>
+        <h1 id="page-title" class="text-2xl font-bold text-gray-900">Job Feed</h1>
         <p id="job-count" class="text-gray-500 text-sm">Loading jobs...</p>
       </div>
       <div id="profile-status" class="flex items-center space-x-2 text-sm">
@@ -156,9 +196,70 @@
       <button onclick="loadJobs()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Try Again</button>
     </div>
 
-    <!-- Jobs Grid -->
+    <!-- Jobs Grid (Job Feed Tab) -->
     <div id="jobs-container" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       <!-- Jobs inserted here -->
+    </div>
+
+    <!-- Kanban Board (My Applications Tab) -->
+    <div id="kanban-container" class="hidden">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Saved Column -->
+        <div class="kanban-column bg-gray-100 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-700 flex items-center">
+              <span class="w-3 h-3 bg-gray-400 rounded-full mr-2"></span>
+              Saved
+            </h3>
+            <span id="saved-count" class="text-xs bg-gray-300 text-gray-700 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanban-saved" class="space-y-3">
+            <!-- Saved jobs here -->
+          </div>
+        </div>
+
+        <!-- Applied Column -->
+        <div class="kanban-column bg-blue-50 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-blue-700 flex items-center">
+              <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+              Applied
+            </h3>
+            <span id="applied-count" class="text-xs bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanban-applied" class="space-y-3">
+            <!-- Applied jobs here -->
+          </div>
+        </div>
+
+        <!-- Interview Column -->
+        <div class="kanban-column bg-purple-50 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-purple-700 flex items-center">
+              <span class="w-3 h-3 bg-purple-500 rounded-full mr-2"></span>
+              Interview
+            </h3>
+            <span id="interview-count" class="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanban-interview" class="space-y-3">
+            <!-- Interview jobs here -->
+          </div>
+        </div>
+
+        <!-- Offer Column -->
+        <div class="kanban-column bg-green-50 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-green-700 flex items-center">
+              <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+              Offer
+            </h3>
+            <span id="offer-count" class="text-xs bg-green-200 text-green-700 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanban-offer" class="space-y-3">
+            <!-- Offer jobs here -->
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Empty State -->
@@ -262,33 +363,23 @@
 
   <script>
     // =============================================
-    // JOB AGENT DASHBOARD 2.0
+    // JOB AGENT DASHBOARD 3.0 - HEART/KANBAN
     // =============================================
 
     let allJobs = [];
-    let currentTab = 'new';
+    let currentTab = 'feed';
     let currentResultText = '';
 
-    // --- Status Colors ---
-    const statusColors = {
-      'new': 'bg-blue-100 text-blue-700',
-      'saved': 'bg-gray-100 text-gray-700',
-      'applied': 'bg-green-100 text-green-700',
-      'interviewing': 'bg-purple-100 text-purple-700',
-      'offer': 'bg-yellow-100 text-yellow-700',
-      'rejected': 'bg-red-100 text-red-700',
-    };
+    // Kanban statuses in order (for move left/right)
+    const KANBAN_STATUSES = ['saved', 'applied', 'interview', 'offer'];
 
     // --- Salary Formatter ---
     function formatSalary(min, max) {
-      // Handle null/undefined
       if (!min && !max) return null;
 
-      // Convert to numbers
       const minVal = parseInt(min) || 0;
       const maxVal = parseInt(max) || 0;
 
-      // Format helper
       const format = (val) => {
         if (val >= 1000) {
           return `$${Math.round(val / 1000)}K`;
@@ -296,12 +387,10 @@
         return `$${val}`;
       };
 
-      // If only one value or they're equal
       if (!minVal && maxVal) return format(maxVal);
       if (minVal && !maxVal) return format(minVal);
       if (minVal === maxVal) return format(minVal);
 
-      // Range
       return `${format(minVal)} - ${format(maxVal)}`;
     }
 
@@ -310,19 +399,31 @@
       currentTab = tab;
 
       // Update tab UI
-      document.getElementById('tab-new').className = tab === 'new'
+      document.getElementById('tab-feed').className = tab === 'feed'
         ? 'pb-3 px-1 font-medium text-sm tab-active'
         : 'pb-3 px-1 font-medium text-sm tab-inactive';
-      document.getElementById('tab-saved').className = tab === 'saved'
+      document.getElementById('tab-kanban').className = tab === 'kanban'
         ? 'pb-3 px-1 font-medium text-sm tab-active'
         : 'pb-3 px-1 font-medium text-sm tab-inactive';
 
       // Update title
-      document.getElementById('page-title').textContent = tab === 'new'
-        ? 'Job Dashboard'
-        : 'Saved & Applied Jobs';
+      document.getElementById('page-title').textContent = tab === 'feed'
+        ? 'Job Feed'
+        : 'My Applications';
 
-      renderJobs();
+      // Toggle containers
+      const jobsContainer = document.getElementById('jobs-container');
+      const kanbanContainer = document.getElementById('kanban-container');
+      const empty = document.getElementById('empty');
+
+      if (tab === 'feed') {
+        kanbanContainer.classList.add('hidden');
+        renderJobs();
+      } else {
+        jobsContainer.classList.add('hidden');
+        empty.classList.add('hidden');
+        renderKanban();
+      }
     }
 
     // --- Load Jobs ---
@@ -331,11 +432,13 @@
       const loading = document.getElementById('loading');
       const error = document.getElementById('error');
       const container = document.getElementById('jobs-container');
+      const kanbanContainer = document.getElementById('kanban-container');
       const empty = document.getElementById('empty');
 
       loading.classList.remove('hidden');
       error.classList.add('hidden');
       container.classList.add('hidden');
+      kanbanContainer.classList.add('hidden');
       empty.classList.add('hidden');
 
       try {
@@ -347,7 +450,12 @@
         allJobs = Array.isArray(jobs) ? jobs : [];
 
         loading.classList.add('hidden');
-        renderJobs();
+
+        if (currentTab === 'feed') {
+          renderJobs();
+        } else {
+          renderKanban();
+        }
 
       } catch (err) {
         console.error('❌', err);
@@ -357,145 +465,223 @@
       }
     }
 
-    // --- Render Jobs (Filtered by Tab) ---
+    // --- Render Jobs (Job Feed - Only Unsaved Jobs) ---
     function renderJobs() {
       const container = document.getElementById('jobs-container');
       const empty = document.getElementById('empty');
       const countEl = document.getElementById('job-count');
 
-      // Filter based on tab
-      let filteredJobs;
-      if (currentTab === 'new') {
-        // New Search: Show all jobs OR jobs with status 'new'
-        filteredJobs = allJobs.filter(job => !job.status || job.status.toLowerCase() === 'new');
-      } else {
-        // Saved & Applied: Show jobs with status != 'new'
-        filteredJobs = allJobs.filter(job => job.status && job.status.toLowerCase() !== 'new');
-      }
+      // Job Feed: Show only jobs with status 'new' or no status
+      const feedJobs = allJobs.filter(job => !job.status || job.status.toLowerCase() === 'new');
 
-      if (filteredJobs.length === 0) {
+      if (feedJobs.length === 0) {
         container.classList.add('hidden');
         empty.classList.remove('hidden');
-
-        if (currentTab === 'new') {
-          document.getElementById('empty-title').textContent = 'No new jobs found';
-          document.getElementById('empty-subtitle').textContent = 'Use the search bar above to find jobs';
-        } else {
-          document.getElementById('empty-title').textContent = 'No saved jobs yet';
-          document.getElementById('empty-subtitle').textContent = 'Change a job\'s status to "Saved" or "Applied" to see it here';
-        }
-
+        document.getElementById('empty-title').textContent = 'No new jobs found';
+        document.getElementById('empty-subtitle').textContent = 'Use the search bar above to find jobs';
         countEl.textContent = '0 jobs';
         return;
       }
 
-      container.innerHTML = filteredJobs.map((job, i) => createJobCard(job, i)).join('');
+      container.innerHTML = feedJobs.map((job) => createFeedCard(job)).join('');
       container.classList.remove('hidden');
       empty.classList.add('hidden');
-      countEl.textContent = `${filteredJobs.length} job${filteredJobs.length !== 1 ? 's' : ''}`;
+      countEl.textContent = `${feedJobs.length} job${feedJobs.length !== 1 ? 's' : ''}`;
     }
 
-    // --- Create Job Card HTML ---
-    function createJobCard(job, index) {
+    // --- Render Kanban Board ---
+    function renderKanban() {
+      const kanbanContainer = document.getElementById('kanban-container');
+      const empty = document.getElementById('empty');
+      const countEl = document.getElementById('job-count');
+
+      // Group jobs by status
+      const savedJobs = allJobs.filter(j => j.status?.toLowerCase() === 'saved');
+      const appliedJobs = allJobs.filter(j => j.status?.toLowerCase() === 'applied');
+      const interviewJobs = allJobs.filter(j => j.status?.toLowerCase() === 'interview' || j.status?.toLowerCase() === 'interviewing');
+      const offerJobs = allJobs.filter(j => j.status?.toLowerCase() === 'offer');
+
+      const totalTracked = savedJobs.length + appliedJobs.length + interviewJobs.length + offerJobs.length;
+
+      if (totalTracked === 0) {
+        kanbanContainer.classList.add('hidden');
+        empty.classList.remove('hidden');
+        document.getElementById('empty-title').textContent = 'No saved applications yet';
+        document.getElementById('empty-subtitle').textContent = 'Click the ❤️ heart on a job card to start tracking';
+        countEl.textContent = '0 tracked';
+        return;
+      }
+
+      // Populate columns
+      document.getElementById('kanban-saved').innerHTML = savedJobs.map(j => createKanbanCard(j, 0)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-applied').innerHTML = appliedJobs.map(j => createKanbanCard(j, 1)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-interview').innerHTML = interviewJobs.map(j => createKanbanCard(j, 2)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-offer').innerHTML = offerJobs.map(j => createKanbanCard(j, 3)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+
+      // Update counts
+      document.getElementById('saved-count').textContent = savedJobs.length;
+      document.getElementById('applied-count').textContent = appliedJobs.length;
+      document.getElementById('interview-count').textContent = interviewJobs.length;
+      document.getElementById('offer-count').textContent = offerJobs.length;
+
+      kanbanContainer.classList.remove('hidden');
+      empty.classList.add('hidden');
+      countEl.textContent = `${totalTracked} tracked`;
+    }
+
+    // --- Create Feed Card HTML (Simplified with Heart) ---
+    function createFeedCard(job) {
       const title = escapeHtml(job.title || 'Untitled');
       const company = escapeHtml(job.company || 'Unknown');
       const location = escapeHtml(job.location || 'Remote');
       const url = job.url || '#';
-      const source = escapeHtml(job.source || 'Manual');
-      const isRemote = job.is_remote;
       const jobId = job.id;
-      const status = (job.status || 'new').toLowerCase();
-      const statusColor = statusColors[status] || statusColors['new'];
-
-      // Format salary
       const salaryText = formatSalary(job.salary_min, job.salary_max);
 
       return `
-                <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden" data-job-id="${jobId}">
-                    <div class="p-4">
-                        <!-- Header -->
-                        <div class="flex items-start justify-between mb-3">
-                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold shrink-0">
-                                ${company.charAt(0).toUpperCase()}
-                            </div>
-                            <div class="flex items-center gap-1.5 flex-wrap justify-end">
-                                ${isRemote ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">Remote</span>' : ''}
-                                <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">${source}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Title & Company -->
-                        <h3 class="font-semibold text-gray-900 leading-tight mb-1 line-clamp-2">${title}</h3>
-                        <p class="text-blue-600 font-medium text-sm mb-2">${company}</p>
-                        
-                        <!-- Location & Salary Row -->
-                        <div class="flex items-center justify-between text-sm mb-3">
-                            <span class="text-gray-500 flex items-center">
-                                <i class="fas fa-map-marker-alt mr-1.5 text-gray-400 text-xs"></i>
-                                <span class="truncate max-w-[120px]">${location}</span>
-                            </span>
-                            ${salaryText ? `<span class="text-green-600 font-semibold">${salaryText}</span>` : '<span class="text-gray-400 text-xs">Salary not listed</span>'}
-                        </div>
-                        
-                        <!-- Status Dropdown -->
-                        <select id="status-${jobId}" onchange="updateJobStatus('${jobId}', this.value)" class="status-badge w-full px-3 py-1.5 text-xs font-medium rounded-lg border-0 cursor-pointer ${statusColor}">
-                            <option value="new" ${status === 'new' ? 'selected' : ''}>🆕 New</option>
-                            <option value="saved" ${status === 'saved' ? 'selected' : ''}>📌 Saved</option>
-                            <option value="applied" ${status === 'applied' ? 'selected' : ''}>✅ Applied</option>
-                            <option value="interviewing" ${status === 'interviewing' ? 'selected' : ''}>🎤 Interviewing</option>
-                            <option value="offer" ${status === 'offer' ? 'selected' : ''}>🎉 Offer</option>
-                            <option value="rejected" ${status === 'rejected' ? 'selected' : ''}>❌ Rejected</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Action Bar -->
-                    <div class="bg-gray-50 px-4 py-2.5 border-t border-gray-100">
-                        <div class="flex items-center justify-between">
-                            <div class="flex gap-1.5">
-                                <button onclick="draftEmail('${jobId}')" id="btn-email-${jobId}" class="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition" title="Cold Email">
-                                    <i class="fas fa-envelope text-xs"></i>
-                                </button>
-                                <button onclick="generateCoverLetter('${jobId}')" id="btn-cover-${jobId}" class="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition" title="Cover Letter">
-                                    <i class="fas fa-file-signature text-xs"></i>
-                                </button>
-                                <button onclick="tailorCV('${jobId}')" id="btn-cv-${jobId}" class="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition" title="Tailored CV">
-                                    <i class="fas fa-file-alt text-xs"></i>
-                                </button>
-                                <button onclick="startInterview('${jobId}')" id="btn-interview-${jobId}" class="p-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition" title="Interview Prep">
-                                    <i class="fas fa-microphone text-xs"></i>
-                                </button>
-                            </div>
-                            <a href="${url}" target="_blank" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition">
-                                Apply <i class="fas fa-external-link-alt ml-1"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            `;
+        <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden" data-job-id="${jobId}">
+          <div class="p-4">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold shrink-0">
+                ${company.charAt(0).toUpperCase()}
+              </div>
+              <button onclick="toggleSave('${jobId}')" class="heart-btn p-2 text-gray-300 hover:text-red-500 transition" title="Save to My Applications">
+                <i class="far fa-heart text-xl"></i>
+              </button>
+            </div>
+            
+            <!-- Title & Company -->
+            <h3 class="font-semibold text-gray-900 leading-tight mb-1 line-clamp-2">${title}</h3>
+            <p class="text-blue-600 font-medium text-sm mb-2">${company}</p>
+            
+            <!-- Location & Salary Row -->
+            <div class="flex items-center justify-between text-sm mb-4">
+              <span class="text-gray-500 flex items-center">
+                <i class="fas fa-map-marker-alt mr-1.5 text-gray-400 text-xs"></i>
+                <span class="truncate max-w-[120px]">${location}</span>
+              </span>
+              ${salaryText ? `<span class="text-green-600 font-semibold">${salaryText}</span>` : '<span class="text-gray-400 text-xs">Salary not listed</span>'}
+            </div>
+          </div>
+          
+          <!-- Action Bar -->
+          <div class="bg-gray-50 px-4 py-3 border-t border-gray-100">
+            <div class="flex items-center justify-between">
+              <button onclick="toggleSave('${jobId}')" class="flex-1 mr-2 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition flex items-center justify-center">
+                <i class="far fa-heart mr-2"></i> Save
+              </button>
+              <a href="${url}" target="_blank" class="flex-1 py-2 bg-blue-600 text-white text-center font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                Apply <i class="fas fa-external-link-alt ml-2"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
-    // --- Update Job Status ---
-    async function updateJobStatus(jobId, status) {
-      const select = document.getElementById(`status-${jobId}`);
-      const statusColor = statusColors[status] || statusColors['new'];
-      select.className = `status-badge w-full px-3 py-1.5 text-xs font-medium rounded-lg border-0 cursor-pointer ${statusColor}`;
+    // --- Create Kanban Card HTML (Minimal with Move Buttons) ---
+    function createKanbanCard(job, columnIndex) {
+      const title = escapeHtml(job.title || 'Untitled');
+      const company = escapeHtml(job.company || 'Unknown');
+      const url = job.url || '#';
+      const jobId = job.id;
 
-      // Update local data
+      const canMoveLeft = columnIndex > 0;
+      const canMoveRight = columnIndex < KANBAN_STATUSES.length - 1;
+
+      return `
+        <div class="kanban-card bg-white rounded-lg border border-gray-200 p-3 shadow-sm" data-job-id="${jobId}">
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1 min-w-0">
+              <h4 class="font-semibold text-gray-900 text-sm leading-tight truncate">${title}</h4>
+              <p class="text-blue-600 text-xs font-medium truncate">${company}</p>
+            </div>
+            <a href="${url}" target="_blank" class="ml-2 text-gray-400 hover:text-blue-500" title="View Job">
+              <i class="fas fa-external-link-alt text-xs"></i>
+            </a>
+          </div>
+          
+          <!-- Move Buttons -->
+          <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+            <button onclick="moveJob('${jobId}', -1)" ${!canMoveLeft ? 'disabled' : ''} class="move-btn p-1.5 text-gray-500 rounded hover:text-gray-700" title="Move Left">
+              <i class="fas fa-chevron-left text-xs"></i>
+            </button>
+            <div class="flex gap-1">
+              <button onclick="draftEmail('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Cold Email">
+                <i class="fas fa-envelope text-xs"></i>
+              </button>
+              <button onclick="generateCoverLetter('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Cover Letter">
+                <i class="fas fa-file-signature text-xs"></i>
+              </button>
+              <button onclick="tailorCV('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Tailored CV">
+                <i class="fas fa-file-alt text-xs"></i>
+              </button>
+            </div>
+            <button onclick="moveJob('${jobId}', 1)" ${!canMoveRight ? 'disabled' : ''} class="move-btn p-1.5 text-gray-500 rounded hover:text-gray-700" title="Move Right">
+              <i class="fas fa-chevron-right text-xs"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Toggle Save (Heart Button) ---
+    async function toggleSave(jobId) {
       const job = allJobs.find(j => j.id === jobId);
-      if (job) job.status = status;
+      if (!job) return;
 
-      // Re-render if status change affects current tab view
-      setTimeout(() => renderJobs(), 300);
+      // Set status to 'saved'
+      job.status = 'saved';
+
+      // Re-render immediately
+      renderJobs();
+      showToast('❤️ Job saved to My Applications!');
 
       // Persist to backend
       try {
         await fetch('/api/update-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: jobId, status: status })
+          body: JSON.stringify({ id: jobId, status: 'saved' })
         });
       } catch (err) {
-        console.log('Status persist skipped');
+        console.log('Status persist skipped:', err);
+      }
+    }
+
+    // --- Move Job (Arrow Buttons in Kanban) ---
+    async function moveJob(jobId, direction) {
+      const job = allJobs.find(j => j.id === jobId);
+      if (!job) return;
+
+      // Normalize status
+      let currentStatus = (job.status || 'saved').toLowerCase();
+      if (currentStatus === 'interviewing') currentStatus = 'interview';
+
+      const currentIndex = KANBAN_STATUSES.indexOf(currentStatus);
+      const newIndex = currentIndex + direction;
+
+      if (newIndex < 0 || newIndex >= KANBAN_STATUSES.length) return;
+
+      const newStatus = KANBAN_STATUSES[newIndex];
+      job.status = newStatus;
+
+      // Re-render kanban
+      renderKanban();
+
+      const statusEmojis = { 'saved': '📌', 'applied': '📤', 'interview': '🎤', 'offer': '🎉' };
+      showToast(`${statusEmojis[newStatus] || '✓'} Moved to ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`);
+
+      // Persist to backend
+      try {
+        await fetch('/api/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: jobId, status: newStatus })
+        });
+      } catch (err) {
+        console.log('Status persist skipped:', err);
       }
     }
 
@@ -530,9 +716,9 @@
         const loc = data.location || location || 'any location';
         showToast(`✅ Found ${added} new jobs for "${query}" in ${loc}!`);
 
-        // Switch to new tab and reload
-        currentTab = 'new';
-        switchTab('new');
+        // Switch to feed tab and reload
+        currentTab = 'feed';
+        switchTab('feed');
         loadJobs();
       } catch (err) {
         showToast(`❌ Search failed: ${err.message}`, 'error');
@@ -634,9 +820,11 @@
     // --- AI Feature Functions ---
     async function draftEmail(jobId) {
       const btn = document.getElementById(`btn-email-${jobId}`);
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.classList.add('btn-loading');
+      const originalHTML = btn?.innerHTML;
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.classList.add('btn-loading');
+      }
 
       try {
         const res = await fetch('/api/generate-cold-email', {
@@ -666,16 +854,20 @@
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       } finally {
-        btn.innerHTML = originalHTML;
-        btn.classList.remove('btn-loading');
+        if (btn && originalHTML) {
+          btn.innerHTML = originalHTML;
+          btn.classList.remove('btn-loading');
+        }
       }
     }
 
     async function generateCoverLetter(jobId) {
       const btn = document.getElementById(`btn-cover-${jobId}`);
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.classList.add('btn-loading');
+      const originalHTML = btn?.innerHTML;
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.classList.add('btn-loading');
+      }
 
       try {
         const res = await fetch('/api/generate-cover-letter', {
@@ -697,16 +889,20 @@
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       } finally {
-        btn.innerHTML = originalHTML;
-        btn.classList.remove('btn-loading');
+        if (btn && originalHTML) {
+          btn.innerHTML = originalHTML;
+          btn.classList.remove('btn-loading');
+        }
       }
     }
 
     async function tailorCV(jobId) {
       const btn = document.getElementById(`btn-cv-${jobId}`);
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.classList.add('btn-loading');
+      const originalHTML = btn?.innerHTML;
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.classList.add('btn-loading');
+      }
 
       try {
         const res = await fetch('/api/generate-curated-cv', {
@@ -729,16 +925,20 @@
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       } finally {
-        btn.innerHTML = originalHTML;
-        btn.classList.remove('btn-loading');
+        if (btn && originalHTML) {
+          btn.innerHTML = originalHTML;
+          btn.classList.remove('btn-loading');
+        }
       }
     }
 
     async function startInterview(jobId) {
       const btn = document.getElementById(`btn-interview-${jobId}`);
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.classList.add('btn-loading');
+      const originalHTML = btn?.innerHTML;
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.classList.add('btn-loading');
+      }
 
       try {
         const res = await fetch('/api/interview/start', {
@@ -763,8 +963,10 @@
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       } finally {
-        btn.innerHTML = originalHTML;
-        btn.classList.remove('btn-loading');
+        if (btn && originalHTML) {
+          btn.innerHTML = originalHTML;
+          btn.classList.remove('btn-loading');
+        }
       }
     }
 
