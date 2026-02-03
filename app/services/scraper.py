@@ -4,7 +4,6 @@ Job Scraper Service
 Real job scraping using Adzuna API + Deep Scraping for full descriptions.
 """
 import os
-import re
 import logging
 from uuid import uuid4
 from typing import List, Dict, Any, Optional
@@ -29,12 +28,6 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 def scrape_job_details(url: str) -> Optional[str]:
     """
     Deep scrape a job posting URL to extract the full description text.
-    
-    Args:
-        url: The job posting URL to scrape
-    
-    Returns:
-        Full job description text, or None if scraping fails
     """
     if not url:
         return None
@@ -52,80 +45,58 @@ def scrape_job_details(url: str) -> Optional[str]:
             response = client.get(url, headers=headers)
             response.raise_for_status()
             html = response.text
-    except httpx.HTTPStatusError as e:
-        logger.warning(f"Deep scrape HTTP error: {e.response.status_code} for {url}")
-        return None
-    except httpx.RequestError as e:
-        logger.warning(f"Deep scrape request failed: {e}")
-        return None
     except Exception as e:
-        logger.warning(f"Deep scrape unexpected error: {e}")
+        logger.warning(f"Deep scrape failed: {e}")
         return None
     
-    # Parse HTML
     soup = BeautifulSoup(html, "html.parser")
     
-    # Remove script and style elements
     for element in soup(["script", "style", "nav", "header", "footer", "aside"]):
         element.decompose()
     
-    # Try to find job description in common containers
     description_text = ""
     
-    # Strategy 1: Look for common job description selectors
     selectors = [
-        # Greenhouse
-        '[data-qa="job-description"]',
-        '.job-description',
-        '#job-description',
-        '.content__content',
-        # Lever
-        '.posting-page',
-        '.section-wrapper',
-        '[data-qa="job-detail"]',
-        # Workable
-        '.job-description-wrapper',
-        # Generic
-        'article',
-        '.job-details',
-        '.job-content',
-        'main',
+        '[data-qa="job-description"]', '.job-description', '#job-description',
+        '.content__content', '.posting-page', '.section-wrapper',
+        '.job-description-wrapper', 'article', '.job-details', '.job-content', 'main',
     ]
     
     for selector in selectors:
         element = soup.select_one(selector)
         if element:
             text = element.get_text(separator='\n', strip=True)
-            if len(text) > 200:  # Must have substantial content
+            if len(text) > 200:
                 description_text = text
                 break
     
-    # Strategy 2: Fallback to body text if no specific container found
     if not description_text or len(description_text) < 200:
         body = soup.find('body')
         if body:
             description_text = body.get_text(separator='\n', strip=True)
     
-    # Clean up the text
     if description_text:
-        # Remove excessive whitespace
         lines = [line.strip() for line in description_text.split('\n') if line.strip()]
         description_text = '\n'.join(lines)
         
-        # Truncate if too long (keep first 8000 chars for AI context)
         if len(description_text) > 8000:
             description_text = description_text[:8000] + "..."
         
-        logger.info(f"✅ Deep scrape success: {len(description_text)} chars extracted")
+        logger.info(f"✅ Deep scrape success: {len(description_text)} chars")
         return description_text
     
-    logger.warning(f"⚠️ Deep scrape: No content found for {url}")
     return None
 
 
-def search_adzuna_jobs(query: str, country: str = "us", results_per_page: int = 10) -> List[Dict[str, Any]]:
+def search_adzuna_jobs(query: str, location: str = "", country: str = "us", results_per_page: int = 15) -> List[Dict[str, Any]]:
     """
     Search for jobs using the Adzuna API.
+    
+    Args:
+        query: Search query (e.g., "AI Engineer")
+        location: Location filter (e.g., "New York", "Remote")
+        country: Country code (us, gb, ca, etc.)
+        results_per_page: Number of results to fetch
     """
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         logger.warning("⚠️ Adzuna API credentials not configured.")
@@ -141,7 +112,11 @@ def search_adzuna_jobs(query: str, country: str = "us", results_per_page: int = 
         "content-type": "application/json",
     }
     
-    logger.info(f"🔍 Searching Adzuna for: {query}")
+    # Add location filter if provided
+    if location and location.strip():
+        params["where"] = location.strip()
+    
+    logger.info(f"🔍 Searching Adzuna: query='{query}', location='{location}'")
     
     try:
         with httpx.Client(timeout=30.0) as client:
@@ -164,31 +139,51 @@ def search_adzuna_jobs(query: str, country: str = "us", results_per_page: int = 
         company = company_obj.get("display_name", "Unknown") if isinstance(company_obj, dict) else "Unknown"
         
         location_obj = item.get("location", {})
-        location = location_obj.get("display_name", "Remote") if isinstance(location_obj, dict) else "Remote"
+        job_location = location_obj.get("display_name", "Remote") if isinstance(location_obj, dict) else "Remote"
+        
+        # Salary handling - ensure clean values
+        salary_min = item.get("salary_min")
+        salary_max = item.get("salary_max")
+        
+        # Convert to int and handle edge cases
+        try:
+            salary_min = int(salary_min) if salary_min else None
+        except (ValueError, TypeError):
+            salary_min = None
+            
+        try:
+            salary_max = int(salary_max) if salary_max else None
+        except (ValueError, TypeError):
+            salary_max = None
         
         jobs.append({
             "id": f"adzuna-{job_id}",
             "title": title[:200],
             "company": company[:100],
-            "location": location[:100],
+            "location": job_location[:100],
             "url": item.get("redirect_url", ""),
             "description": item.get("description", "")[:2000],
-            "salary_min": item.get("salary_min"),
-            "salary_max": item.get("salary_max"),
-            "is_remote": "remote" in location.lower() or "remote" in title.lower(),
+            "salary_min": salary_min,
+            "salary_max": salary_max,
+            "is_remote": "remote" in job_location.lower() or "remote" in title.lower(),
             "source": "Adzuna",
         })
     
     return jobs
 
 
-def run_scraper(query: str = "AI Engineer", country: str = "us") -> Dict[str, Any]:
+def run_scraper(query: str = "AI Engineer", country: str = "us", location: str = "") -> Dict[str, Any]:
     """
     Main scraper function. Fetches jobs from Adzuna and saves to database.
-    """
-    logger.info(f"🔍 SCRAPER: Starting job scrape for '{query}'...")
     
-    jobs = search_adzuna_jobs(query, country=country, results_per_page=15)
+    Args:
+        query: Search query for jobs
+        country: Country code
+        location: Location filter
+    """
+    logger.info(f"🔍 SCRAPER: Starting search for '{query}' in '{location or 'any location'}'...")
+    
+    jobs = search_adzuna_jobs(query, location=location, country=country, results_per_page=15)
     
     if not jobs:
         return {
@@ -197,6 +192,7 @@ def run_scraper(query: str = "AI Engineer", country: str = "us") -> Dict[str, An
             "skipped": 0,
             "total_processed": 0,
             "query": query,
+            "location": location,
             "source": "Adzuna",
         }
     
@@ -240,6 +236,7 @@ def run_scraper(query: str = "AI Engineer", country: str = "us") -> Dict[str, An
             "skipped": skipped,
             "total_processed": len(jobs),
             "query": query,
+            "location": location,
             "source": "Adzuna",
         }
         
@@ -254,13 +251,6 @@ def run_scraper(query: str = "AI Engineer", country: str = "us") -> Dict[str, An
 def enrich_job_description(job_id: str) -> Dict[str, Any]:
     """
     Enrich a job's description by deep scraping its URL.
-    Updates the database with the full description.
-    
-    Args:
-        job_id: The job ID to enrich
-    
-    Returns:
-        Result with status and updated description length
     """
     db = SessionLocal()
     
@@ -273,12 +263,10 @@ def enrich_job_description(job_id: str) -> Dict[str, Any]:
         if not job.url:
             return {"status": "error", "error": "Job has no URL"}
         
-        # Check if already has full description
         current_len = len(job.description or "")
         if current_len > 500:
             return {"status": "skipped", "reason": "Already has full description", "chars": current_len}
         
-        # Deep scrape
         full_description = scrape_job_details(job.url)
         
         if full_description and len(full_description) > current_len:
