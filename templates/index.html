@@ -591,7 +591,6 @@
       countEl.textContent = `${totalTracked} tracked`;
     }
 
-    // --- Create Feed Card HTML (Heart Icon Only) ---
     function createFeedCard(job) {
       const title = escapeHtml(job.title || 'Untitled');
       const company = escapeHtml(job.company || 'Unknown');
@@ -639,11 +638,27 @@
               </span>
               ${salaryText ? `<span class="text-green-600 font-semibold">${salaryText}</span>` : '<span class="text-gray-400 text-xs">Salary not listed</span>'}
             </div>
+            
+            <!-- AI Action Buttons (2x2 Grid) -->
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <button onclick="tailorCV('${jobId}')" class="py-2 px-3 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                <i class="fas fa-file-alt mr-1.5"></i> Tailor CV
+              </button>
+              <button onclick="draftEmail('${jobId}')" class="py-2 px-3 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+                <i class="fas fa-envelope mr-1.5"></i> Draft Email
+              </button>
+              <button onclick="generateCoverLetter('${jobId}')" class="py-2 px-3 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
+                <i class="fas fa-file-signature mr-1.5"></i> Cover Letter
+              </button>
+              <button onclick="startInterview('${jobId}')" class="py-2 px-3 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition flex items-center justify-center">
+                <i class="fas fa-microphone mr-1.5"></i> Interview Prep
+              </button>
+            </div>
           </div>
           
-          <!-- Action Bar (Apply Only) -->
+          <!-- Action Bar -->
           <div class="bg-gray-50 px-4 py-3 border-t border-gray-100">
-            <a href="${url}" target="_blank" class="w-full py-2.5 bg-blue-600 text-white text-center font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+            <a href="${url}" target="_blank" class="w-full py-2.5 bg-gray-800 text-white text-center font-medium rounded-lg hover:bg-gray-900 transition flex items-center justify-center">
               Apply Now <i class="fas fa-external-link-alt ml-2"></i>
             </a>
           </div>
@@ -651,7 +666,7 @@
       `;
     }
 
-    // --- Create Kanban Card HTML (Minimal with Move Buttons) ---
+    // --- Create Kanban Card HTML (With AI Buttons & Delete) ---
     function createKanbanCard(job, columnIndex) {
       const title = escapeHtml(job.title || 'Untitled');
       const company = escapeHtml(job.company || 'Unknown');
@@ -660,37 +675,51 @@
 
       const canMoveLeft = columnIndex > 0;
       const canMoveRight = columnIndex < KANBAN_STATUSES.length - 1;
+      const isSavedColumn = columnIndex === 0;  // Show delete only in Saved column
 
       return `
         <div class="kanban-card bg-white rounded-lg border border-gray-200 p-3 shadow-sm" data-job-id="${jobId}">
+          <!-- Header with Title & Actions -->
           <div class="flex items-start justify-between mb-2">
             <div class="flex-1 min-w-0">
               <h4 class="font-semibold text-gray-900 text-sm leading-tight truncate">${title}</h4>
               <p class="text-blue-600 text-xs font-medium truncate">${company}</p>
             </div>
-            <a href="${url}" target="_blank" class="ml-2 text-gray-400 hover:text-blue-500" title="View Job">
-              <i class="fas fa-external-link-alt text-xs"></i>
-            </a>
+            <div class="flex items-center gap-1 ml-2">
+              <a href="${url}" target="_blank" class="text-gray-400 hover:text-blue-500 p-1" title="View Job">
+                <i class="fas fa-external-link-alt text-xs"></i>
+              </a>
+              ${isSavedColumn ? `
+                <button onclick="deleteJob(${jobId})" class="text-gray-400 hover:text-red-500 p-1" title="Remove from saved">
+                  <i class="fas fa-trash-alt text-xs"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+          
+          <!-- AI Action Buttons (2x2 Grid) -->
+          <div class="grid grid-cols-2 gap-1.5 mb-3">
+            <button onclick="tailorCV('${jobId}')" class="py-1.5 px-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition flex items-center justify-center">
+              <i class="fas fa-file-alt mr-1"></i> CV
+            </button>
+            <button onclick="draftEmail('${jobId}')" class="py-1.5 px-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition flex items-center justify-center">
+              <i class="fas fa-envelope mr-1"></i> Email
+            </button>
+            <button onclick="generateCoverLetter('${jobId}')" class="py-1.5 px-2 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 transition flex items-center justify-center">
+              <i class="fas fa-file-signature mr-1"></i> Cover
+            </button>
+            <button onclick="startInterview('${jobId}')" class="py-1.5 px-2 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition flex items-center justify-center">
+              <i class="fas fa-microphone mr-1"></i> Interview
+            </button>
           </div>
           
           <!-- Move Buttons -->
           <div class="flex items-center justify-between pt-2 border-t border-gray-100">
-            <button onclick="moveJob('${jobId}', -1)" ${!canMoveLeft ? 'disabled' : ''} class="move-btn p-1.5 text-gray-500 rounded hover:text-gray-700" title="Move Left">
-              <i class="fas fa-chevron-left text-xs"></i>
+            <button onclick="moveJob('${jobId}', -1)" ${!canMoveLeft ? 'disabled' : ''} class="move-btn px-3 py-1 text-xs text-gray-600 rounded hover:bg-gray-100 disabled:opacity-30" title="Move Left">
+              <i class="fas fa-chevron-left mr-1"></i> Back
             </button>
-            <div class="flex gap-1">
-              <button onclick="draftEmail('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Cold Email">
-                <i class="fas fa-envelope text-xs"></i>
-              </button>
-              <button onclick="generateCoverLetter('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Cover Letter">
-                <i class="fas fa-file-signature text-xs"></i>
-              </button>
-              <button onclick="tailorCV('${jobId}')" class="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Tailored CV">
-                <i class="fas fa-file-alt text-xs"></i>
-              </button>
-            </div>
-            <button onclick="moveJob('${jobId}', 1)" ${!canMoveRight ? 'disabled' : ''} class="move-btn p-1.5 text-gray-500 rounded hover:text-gray-700" title="Move Right">
-              <i class="fas fa-chevron-right text-xs"></i>
+            <button onclick="moveJob('${jobId}', 1)" ${!canMoveRight ? 'disabled' : ''} class="move-btn px-3 py-1 text-xs text-gray-600 rounded hover:bg-gray-100 disabled:opacity-30" title="Move Right">
+              Next <i class="fas fa-chevron-right ml-1"></i>
             </button>
           </div>
         </div>
@@ -812,6 +841,32 @@
         });
       } catch (err) {
         console.log('Status persist skipped:', err);
+      }
+    }
+
+    // --- Delete Job (Remove from Kanban) ---
+    async function deleteJob(jobId) {
+      // Find the job in savedJobs to get its URL
+      const job = savedJobs.find(j => j.id == jobId);
+
+      // Remove from local state immediately
+      savedJobs = savedJobs.filter(j => j.id != jobId);
+
+      // Also remove from savedJobsMap
+      if (job) {
+        const url = job.url || job.link || '';
+        if (url) savedJobsMap.delete(url);
+      }
+
+      // Re-render kanban
+      renderKanban();
+      showToast('🗑️ Job removed from saved');
+
+      // Persist to backend
+      try {
+        await fetch(`/api/saved-jobs/${jobId}`, { method: 'DELETE' });
+      } catch (err) {
+        console.log('Delete failed:', err);
       }
     }
 
