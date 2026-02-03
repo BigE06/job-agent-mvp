@@ -4,8 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job Agent | Your AI-Powered Job Board</title>
-  <meta name="description" content="Browse AI-curated job listings and apply with one click.">
+  <title>Job Agent | AI Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
@@ -20,8 +19,21 @@
     }
 
     .card-hover:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .modal-backdrop {
+      backdrop-filter: blur(4px);
+    }
+
+    .btn-loading {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .cv-preview {
+      font-family: 'Times New Roman', serif;
     }
   </style>
 </head>
@@ -29,38 +41,43 @@
 <body class="bg-gray-50 min-h-screen">
 
   <!-- Header -->
-  <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
+        <div
+          class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center">
           <i class="fas fa-bolt text-white"></i>
         </div>
-        <span class="text-xl font-bold">JobAgent</span>
+        <span class="text-xl font-bold text-gray-900">JobAgent</span>
       </div>
-      <div class="flex items-center space-x-4">
-        <button onclick="loadJobs()" class="text-sm text-gray-600 hover:text-gray-900">
+      <div class="flex items-center space-x-3">
+        <button onclick="loadJobs()" class="px-3 py-2 text-gray-600 hover:text-gray-900 text-sm">
           <i class="fas fa-sync-alt mr-1"></i> Refresh
         </button>
         <button onclick="triggerScrape()"
           class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-          <i class="fas fa-search mr-1"></i> Scrape New Jobs
+          <i class="fas fa-search mr-1"></i> Scrape Jobs
+        </button>
+        <button onclick="openProfileModal()"
+          class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200">
+          <i class="fas fa-user mr-1"></i> Profile
         </button>
       </div>
     </div>
   </header>
 
   <!-- Main Content -->
-  <main class="max-w-6xl mx-auto px-6 py-8">
+  <main class="max-w-7xl mx-auto px-6 py-8">
 
     <!-- Stats Bar -->
     <div class="mb-8 flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Job Listings</h1>
-        <p id="job-count" class="text-gray-500 text-sm">Loading...</p>
+        <h1 class="text-2xl font-bold text-gray-900">Job Dashboard</h1>
+        <p id="job-count" class="text-gray-500 text-sm">Loading jobs...</p>
       </div>
-      <div class="flex items-center space-x-2 text-sm text-gray-500">
-        <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full">
-          <i class="fas fa-check-circle mr-1"></i> API Connected
+      <div id="profile-status" class="flex items-center space-x-2 text-sm">
+        <span class="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full">
+          <i class="fas fa-exclamation-circle mr-1"></i> No Resume Uploaded
         </span>
       </div>
     </div>
@@ -76,63 +93,115 @@
       <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
       <p class="text-gray-700 font-medium">Failed to load jobs</p>
       <p id="error-message" class="text-gray-500 text-sm mt-2"></p>
-      <button onclick="loadJobs()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
-        Try Again
-      </button>
+      <button onclick="loadJobs()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Try Again</button>
     </div>
 
     <!-- Jobs Grid -->
-    <div id="jobs-container" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- Jobs will be inserted here -->
+    <div id="jobs-container" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <!-- Jobs inserted here -->
     </div>
 
     <!-- Empty State -->
     <div id="empty" class="hidden text-center py-16">
       <i class="fas fa-briefcase text-4xl text-gray-300 mb-4"></i>
       <p class="text-gray-700 font-medium">No jobs found</p>
-      <p class="text-gray-500 text-sm mt-2">Click "Scrape New Jobs" to fetch listings</p>
+      <p class="text-gray-500 text-sm mt-2">Click "Scrape Jobs" to fetch new listings</p>
     </div>
-
   </main>
 
-  <!-- Footer -->
-  <footer class="text-center py-8 text-gray-400 text-sm">
-    &copy; 2024 JobAgent AI. All rights reserved.
-  </footer>
+  <!-- ======================== -->
+  <!-- PROFILE MODAL -->
+  <!-- ======================== -->
+  <div id="profile-modal" class="fixed inset-0 z-50 hidden">
+    <div class="modal-backdrop absolute inset-0 bg-black/40" onclick="closeProfileModal()"></div>
+    <div
+      class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between p-6 border-b">
+        <h2 class="text-xl font-bold text-gray-900">Your Profile</h2>
+        <button onclick="closeProfileModal()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="p-6 max-h-[70vh] overflow-y-auto">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Resume Text</label>
+          <textarea id="profile-resume" rows="12"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="Paste your resume text here..."></textarea>
+          <p class="text-xs text-gray-500 mt-1">This is used by AI to generate tailored CVs and emails.</p>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Key Skills (comma-separated)</label>
+          <input type="text" id="profile-skills"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="Python, Machine Learning, FastAPI, SQL...">
+        </div>
+      </div>
+      <div class="flex justify-end p-6 border-t bg-gray-50">
+        <button onclick="closeProfileModal()" class="px-4 py-2 text-gray-600 mr-3">Cancel</button>
+        <button onclick="saveProfile()"
+          class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">
+          <i class="fas fa-save mr-2"></i> Save Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- RESULT MODAL (Email/CV/Interview) -->
+  <!-- ======================== -->
+  <div id="result-modal" class="fixed inset-0 z-50 hidden">
+    <div class="modal-backdrop absolute inset-0 bg-black/40" onclick="closeResultModal()"></div>
+    <div
+      class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between p-6 border-b shrink-0">
+        <h2 id="result-title" class="text-xl font-bold text-gray-900">Result</h2>
+        <button onclick="closeResultModal()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div id="result-content" class="p-6 overflow-y-auto flex-1">
+        <!-- Dynamic content -->
+      </div>
+      <div class="flex justify-end p-4 border-t bg-gray-50 shrink-0">
+        <button onclick="copyResultToClipboard()" class="px-4 py-2 text-gray-600 mr-3 hover:bg-gray-100 rounded-lg">
+          <i class="fas fa-copy mr-2"></i> Copy
+        </button>
+        <button onclick="closeResultModal()"
+          class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Done</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     // =============================================
-    // JOB AGENT - FRONTEND SCRIPT
+    // JOB AGENT DASHBOARD
     // =============================================
 
-    const API_BASE = ''; // Empty = relative URLs (works on localhost AND production)
+    let currentJobs = [];
+    let currentResultText = '';
 
-    // --- Load Jobs from API ---
+    // --- Load Jobs ---
     async function loadJobs() {
       console.log('🔍 Fetching jobs...');
-
       const loading = document.getElementById('loading');
       const error = document.getElementById('error');
       const container = document.getElementById('jobs-container');
       const empty = document.getElementById('empty');
       const countEl = document.getElementById('job-count');
 
-      // Reset states
       loading.classList.remove('hidden');
       error.classList.add('hidden');
       container.classList.add('hidden');
       empty.classList.add('hidden');
 
       try {
-        const response = await fetch(`${API_BASE}/jobs`);
+        const res = await fetch('/jobs');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        // API returns a LIST directly, not { jobs: [...] }
-        const jobs = await response.json();
-        console.log('✅ Jobs received:', jobs);
+        const jobs = await res.json();
+        console.log('✅ Jobs:', jobs);
+        currentJobs = jobs;
 
         loading.classList.add('hidden');
 
@@ -142,17 +211,12 @@
           return;
         }
 
-        // Render jobs
-        container.innerHTML = '';
-        jobs.forEach(job => {
-          container.innerHTML += createJobCard(job);
-        });
-
+        container.innerHTML = jobs.map((job, i) => createJobCard(job, i)).join('');
         container.classList.remove('hidden');
         countEl.textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''} found`;
 
       } catch (err) {
-        console.error('❌ Error:', err);
+        console.error('❌', err);
         loading.classList.add('hidden');
         error.classList.remove('hidden');
         document.getElementById('error-message').textContent = err.message;
@@ -160,79 +224,270 @@
     }
 
     // --- Create Job Card HTML ---
-    function createJobCard(job) {
-      const title = escapeHtml(job.title || 'Untitled Position');
-      const company = escapeHtml(job.company || 'Unknown Company');
-      const location = escapeHtml(job.location || 'Location not specified');
+    function createJobCard(job, index) {
+      const title = escapeHtml(job.title || 'Untitled');
+      const company = escapeHtml(job.company || 'Unknown');
+      const location = escapeHtml(job.location || 'Remote');
       const url = job.url || '#';
       const source = escapeHtml(job.source || 'Manual');
       const isRemote = job.is_remote;
       const salaryMin = job.salary_min;
       const salaryMax = job.salary_max;
+      const jobId = job.id;
 
-      // Format salary
       let salaryText = '';
       if (salaryMin && salaryMax) {
         salaryText = `$${(salaryMin / 1000).toFixed(0)}K - $${(salaryMax / 1000).toFixed(0)}K`;
-      } else if (salaryMin) {
-        salaryText = `From $${(salaryMin / 1000).toFixed(0)}K`;
       }
 
       return `
-                <div class="card-hover bg-white rounded-xl border border-gray-200 p-6">
-                    <div class="flex items-start justify-between mb-4">
-                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                            ${company.charAt(0).toUpperCase()}
+                <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div class="p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="w-11 h-11 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                                ${company.charAt(0).toUpperCase()}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                ${isRemote ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Remote</span>' : ''}
+                                <span class="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full">${source}</span>
+                            </div>
                         </div>
-                        ${isRemote ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Remote</span>' : ''}
+                        
+                        <h3 class="font-semibold text-gray-900 text-lg mb-1 leading-tight">${title}</h3>
+                        <p class="text-blue-600 font-medium text-sm mb-1">${company}</p>
+                        <p class="text-gray-500 text-sm mb-2"><i class="fas fa-map-marker-alt mr-1 text-gray-400"></i>${location}</p>
+                        ${salaryText ? `<p class="text-green-600 font-semibold text-sm"><i class="fas fa-dollar-sign mr-1"></i>${salaryText}</p>` : ''}
                     </div>
                     
-                    <h3 class="font-semibold text-gray-900 text-lg mb-1 line-clamp-2">${title}</h3>
-                    <p class="text-blue-600 font-medium mb-2">${company}</p>
-                    <p class="text-gray-500 text-sm mb-4">
-                        <i class="fas fa-map-marker-alt mr-1"></i> ${location}
-                    </p>
-                    
-                    ${salaryText ? `<p class="text-green-600 font-semibold text-sm mb-4"><i class="fas fa-dollar-sign mr-1"></i> ${salaryText}</p>` : ''}
-                    
-                    <div class="flex items-center justify-between pt-4 border-t border-gray-100">
-                        <span class="text-xs text-gray-400">${source}</span>
-                        <a href="${url}" target="_blank" rel="noopener" 
-                           class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
-                            Apply Now <i class="fas fa-external-link-alt ml-1"></i>
-                        </a>
+                    <!-- Action Bar -->
+                    <div class="bg-gray-50 px-5 py-3 border-t border-gray-100">
+                        <div class="flex items-center justify-between">
+                            <div class="flex space-x-2">
+                                <button onclick="draftEmail('${jobId}')" id="btn-email-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                    <i class="fas fa-envelope mr-1"></i> Email
+                                </button>
+                                <button onclick="tailorCV('${jobId}')" id="btn-cv-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                    <i class="fas fa-file-alt mr-1"></i> CV
+                                </button>
+                                <button onclick="startInterview('${jobId}')" id="btn-interview-${jobId}" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition">
+                                    <i class="fas fa-microphone mr-1"></i> Prep
+                                </button>
+                            </div>
+                            <a href="${url}" target="_blank" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition">
+                                Apply <i class="fas fa-external-link-alt ml-1"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             `;
     }
 
-    // --- Trigger Scraper ---
-    async function triggerScrape() {
-      console.log('🔍 Triggering scraper...');
+    // --- Draft Cold Email ---
+    async function draftEmail(jobId) {
+      const btn = document.getElementById(`btn-email-${jobId}`);
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Loading...';
+      btn.classList.add('btn-loading');
 
       try {
-        const response = await fetch(`${API_BASE}/jobs/scrape-sync`, { method: 'POST' });
-        const result = await response.json();
-        console.log('✅ Scrape result:', result);
+        const res = await fetch('/api/generate-cold-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        });
+        const data = await res.json();
+        console.log('Email result:', data);
 
-        alert(`Scraping complete!\nAdded: ${result.added || 0} jobs\nSkipped: ${result.skipped || 0} duplicates`);
-        loadJobs(); // Refresh the list
-
+        if (data.error) {
+          showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+        } else {
+          const subject = escapeHtml(data.subject || 'No subject');
+          const body = escapeHtml(data.body || 'No content').replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+          currentResultText = `Subject: ${data.subject}\n\n${data.body}`;
+          showResult('📧 Cold Email Draft', `
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-500 mb-1">Subject</label>
+                            <p class="text-lg font-semibold text-gray-900">${subject}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500 mb-1">Body</label>
+                            <div class="bg-gray-50 rounded-lg p-4 text-gray-800 leading-relaxed">${body}</div>
+                        </div>
+                    `);
+        }
       } catch (err) {
-        console.error('❌ Scrape error:', err);
-        alert('Failed to scrape. Check console for details.');
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-loading');
       }
     }
 
-    // --- Escape HTML to prevent XSS ---
+    // --- Tailor CV ---
+    async function tailorCV(jobId) {
+      const btn = document.getElementById(`btn-cv-${jobId}`);
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...';
+      btn.classList.add('btn-loading');
+
+      try {
+        const res = await fetch('/api/generate-curated-cv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId, gap_answers: [] })
+        });
+        const data = await res.json();
+        console.log('CV result:', data);
+
+        if (data.error) {
+          showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+        } else {
+          currentResultText = data.cv_html || '';
+          showResult('📄 Tailored CV (Harvard Style)', `
+                        <div class="bg-white border rounded-lg p-6 cv-preview overflow-auto max-h-[60vh]">
+                            ${data.cv_html || '<p class="text-gray-500">No CV generated</p>'}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle mr-1"></i> Print this page or copy the HTML to save your CV.</p>
+                    `);
+        }
+      } catch (err) {
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-loading');
+      }
+    }
+
+    // --- Start Interview ---
+    async function startInterview(jobId) {
+      const btn = document.getElementById(`btn-interview-${jobId}`);
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Starting...';
+      btn.classList.add('btn-loading');
+
+      try {
+        const res = await fetch('/api/interview/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        });
+        const data = await res.json();
+        console.log('Interview start:', data);
+
+        if (data.error) {
+          showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+        } else {
+          currentResultText = data.question || '';
+          showResult(`🎤 Interview: ${escapeHtml(data.job_title)} at ${escapeHtml(data.company)}`, `
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5 mb-4">
+                            <p class="text-sm text-blue-600 font-medium mb-2">Interviewer:</p>
+                            <p class="text-lg text-gray-900">${escapeHtml(data.question)}</p>
+                        </div>
+                        <p class="text-sm text-gray-500"><i class="fas fa-lightbulb mr-1 text-yellow-500"></i> Practice answering this question out loud using the STAR method.</p>
+                    `);
+        }
+      } catch (err) {
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-loading');
+      }
+    }
+
+    // --- Scrape Jobs ---
+    async function triggerScrape() {
+      const query = prompt('Enter search query:', 'AI Engineer');
+      if (!query) return;
+
+      try {
+        const res = await fetch(`/jobs/scrape-sync?query=${encodeURIComponent(query)}`, { method: 'POST' });
+        const data = await res.json();
+        alert(`✅ Scraping complete!\nAdded: ${data.added || 0}\nSkipped: ${data.skipped || 0}`);
+        loadJobs();
+      } catch (err) {
+        alert('❌ Scraping failed: ' + err.message);
+      }
+    }
+
+    // --- Profile Modal ---
+    async function openProfileModal() {
+      document.getElementById('profile-modal').classList.remove('hidden');
+      try {
+        const res = await fetch('/api/get-profile');
+        const data = await res.json();
+        document.getElementById('profile-resume').value = data.resume_text || '';
+        document.getElementById('profile-skills').value = data.skills || '';
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+      }
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profile-modal').classList.add('hidden');
+    }
+
+    async function saveProfile() {
+      const resume = document.getElementById('profile-resume').value;
+      const skills = document.getElementById('profile-skills').value;
+
+      try {
+        await fetch('/api/save-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume_text: resume, skills: skills })
+        });
+        closeProfileModal();
+        updateProfileStatus(resume);
+        alert('✅ Profile saved!');
+      } catch (err) {
+        alert('❌ Failed to save: ' + err.message);
+      }
+    }
+
+    function updateProfileStatus(resumeText) {
+      const el = document.getElementById('profile-status');
+      if (resumeText && resumeText.length > 50) {
+        el.innerHTML = `<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full"><i class="fas fa-check-circle mr-1"></i> Resume Loaded</span>`;
+      } else {
+        el.innerHTML = `<span class="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full"><i class="fas fa-exclamation-circle mr-1"></i> No Resume Uploaded</span>`;
+      }
+    }
+
+    // --- Result Modal ---
+    function showResult(title, content) {
+      document.getElementById('result-title').textContent = title;
+      document.getElementById('result-content').innerHTML = content;
+      document.getElementById('result-modal').classList.remove('hidden');
+    }
+
+    function closeResultModal() {
+      document.getElementById('result-modal').classList.add('hidden');
+    }
+
+    function copyResultToClipboard() {
+      if (currentResultText) {
+        navigator.clipboard.writeText(currentResultText);
+        alert('✅ Copied to clipboard!');
+      }
+    }
+
+    // --- Utilities ---
     function escapeHtml(text) {
       const div = document.createElement('div');
-      div.textContent = text;
+      div.textContent = text || '';
       return div.innerHTML;
     }
 
-    // --- Load jobs on page load ---
-    document.addEventListener('DOMContentLoaded', loadJobs);
+    // --- Init ---
+    document.addEventListener('DOMContentLoaded', async () => {
+      loadJobs();
+      // Check profile status
+      try {
+        const res = await fetch('/api/get-profile');
+        const data = await res.json();
+        updateProfileStatus(data.resume_text);
+      } catch (e) { }
+    });
   </script>
 
 </body>
