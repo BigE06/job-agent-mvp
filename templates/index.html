@@ -367,6 +367,8 @@
     // =============================================
 
     let allJobs = [];
+    let savedJobs = [];  // Separate array for saved jobs (from /api/saved-jobs)
+    let savedJobsMap = new Map();  // Map URL -> saved job ID for toggle state
     let currentTab = 'feed';
     let currentResultText = '';
 
@@ -420,13 +422,14 @@
         kanbanContainer.classList.add('hidden');
         renderJobs();
       } else {
+        // Kanban: Fetch saved jobs from DB (source of truth)
         jobsContainer.classList.add('hidden');
         empty.classList.add('hidden');
-        renderKanban();
+        loadSavedJobs();
       }
     }
 
-    // --- Load Jobs ---
+    // --- Load Jobs (Feed) ---
     async function loadJobs() {
       console.log('🔍 Fetching jobs...');
       const loading = document.getElementById('loading');
@@ -442,12 +445,29 @@
       empty.classList.add('hidden');
 
       try {
-        const res = await fetch('/jobs');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Load feed jobs AND saved jobs map in parallel
+        const [feedRes, savedRes] = await Promise.all([
+          fetch('/jobs'),
+          fetch('/api/saved-jobs')
+        ]);
 
-        const jobs = await res.json();
-        console.log('✅ Loaded jobs:', jobs.length);
+        if (!feedRes.ok) throw new Error(`Feed: HTTP ${feedRes.status}`);
+
+        const jobs = await feedRes.json();
+        console.log('✅ Loaded feed jobs:', jobs.length);
         allJobs = Array.isArray(jobs) ? jobs : [];
+
+        // Build savedJobsMap from saved jobs (URL -> ID)
+        if (savedRes.ok) {
+          const savedData = await savedRes.json();
+          savedJobs = savedData.jobs || [];
+          savedJobsMap.clear();
+          savedJobs.forEach(job => {
+            const url = job.url || job.link || '';
+            if (url) savedJobsMap.set(url, job.id);
+          });
+          console.log('✅ Loaded saved jobs map:', savedJobsMap.size);
+        }
 
         loading.classList.add('hidden');
 
@@ -462,6 +482,36 @@
         loading.classList.add('hidden');
         error.classList.remove('hidden');
         document.getElementById('error-message').textContent = err.message;
+      }
+    }
+
+    // --- Load Saved Jobs (Kanban - from DB) ---
+    async function loadSavedJobs() {
+      const kanbanContainer = document.getElementById('kanban-container');
+      const countEl = document.getElementById('job-count');
+
+      countEl.textContent = 'Loading...';
+
+      try {
+        const res = await fetch('/api/saved-jobs');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        savedJobs = data.jobs || [];
+        console.log('✅ Loaded saved jobs:', savedJobs.length);
+
+        // Update savedJobsMap
+        savedJobsMap.clear();
+        savedJobs.forEach(job => {
+          const url = job.url || job.link || '';
+          if (url) savedJobsMap.set(url, job.id);
+        });
+
+        renderKanban();
+
+      } catch (err) {
+        console.error('❌ Failed to load saved jobs:', err);
+        countEl.textContent = 'Error loading';
       }
     }
 
@@ -489,19 +539,31 @@
       countEl.textContent = `${feedJobs.length} job${feedJobs.length !== 1 ? 's' : ''}`;
     }
 
-    // --- Render Kanban Board ---
+    // --- Render Kanban Board (uses savedJobs from API) ---
     function renderKanban() {
       const kanbanContainer = document.getElementById('kanban-container');
       const empty = document.getElementById('empty');
       const countEl = document.getElementById('job-count');
 
-      // Group jobs by status
-      const savedJobs = allJobs.filter(j => j.status?.toLowerCase() === 'saved');
-      const appliedJobs = allJobs.filter(j => j.status?.toLowerCase() === 'applied');
-      const interviewJobs = allJobs.filter(j => j.status?.toLowerCase() === 'interview' || j.status?.toLowerCase() === 'interviewing');
-      const offerJobs = allJobs.filter(j => j.status?.toLowerCase() === 'offer');
+      // Group saved jobs by status (use savedJobs array, not allJobs)
+      const statusSaved = savedJobs.filter(j => {
+        const status = (j.status || 'Saved').toLowerCase();
+        return status === 'saved';
+      });
+      const statusApplied = savedJobs.filter(j => {
+        const status = (j.status || '').toLowerCase();
+        return status === 'applied';
+      });
+      const statusInterview = savedJobs.filter(j => {
+        const status = (j.status || '').toLowerCase();
+        return status === 'interview' || status === 'interviewing';
+      });
+      const statusOffer = savedJobs.filter(j => {
+        const status = (j.status || '').toLowerCase();
+        return status === 'offer';
+      });
 
-      const totalTracked = savedJobs.length + appliedJobs.length + interviewJobs.length + offerJobs.length;
+      const totalTracked = savedJobs.length;
 
       if (totalTracked === 0) {
         kanbanContainer.classList.add('hidden');
@@ -513,23 +575,23 @@
       }
 
       // Populate columns
-      document.getElementById('kanban-saved').innerHTML = savedJobs.map(j => createKanbanCard(j, 0)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
-      document.getElementById('kanban-applied').innerHTML = appliedJobs.map(j => createKanbanCard(j, 1)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
-      document.getElementById('kanban-interview').innerHTML = interviewJobs.map(j => createKanbanCard(j, 2)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
-      document.getElementById('kanban-offer').innerHTML = offerJobs.map(j => createKanbanCard(j, 3)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-saved').innerHTML = statusSaved.map(j => createKanbanCard(j, 0)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-applied').innerHTML = statusApplied.map(j => createKanbanCard(j, 1)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-interview').innerHTML = statusInterview.map(j => createKanbanCard(j, 2)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
+      document.getElementById('kanban-offer').innerHTML = statusOffer.map(j => createKanbanCard(j, 3)).join('') || '<p class="text-gray-400 text-sm text-center py-4">No jobs</p>';
 
       // Update counts
-      document.getElementById('saved-count').textContent = savedJobs.length;
-      document.getElementById('applied-count').textContent = appliedJobs.length;
-      document.getElementById('interview-count').textContent = interviewJobs.length;
-      document.getElementById('offer-count').textContent = offerJobs.length;
+      document.getElementById('saved-count').textContent = statusSaved.length;
+      document.getElementById('applied-count').textContent = statusApplied.length;
+      document.getElementById('interview-count').textContent = statusInterview.length;
+      document.getElementById('offer-count').textContent = statusOffer.length;
 
       kanbanContainer.classList.remove('hidden');
       empty.classList.add('hidden');
       countEl.textContent = `${totalTracked} tracked`;
     }
 
-    // --- Create Feed Card HTML (Simplified with Heart) ---
+    // --- Create Feed Card HTML (Heart Icon Only) ---
     function createFeedCard(job) {
       const title = escapeHtml(job.title || 'Untitled');
       const company = escapeHtml(job.company || 'Unknown');
@@ -538,16 +600,30 @@
       const jobId = job.id;
       const salaryText = formatSalary(job.salary_min, job.salary_max);
 
+      // Check if this job is saved (by URL for deduplication)
+      const isSaved = savedJobsMap.has(url);
+      const heartClass = isSaved ? 'fas fa-heart text-xl' : 'far fa-heart text-xl';
+      const heartColor = isSaved ? 'text-red-500' : 'text-gray-300 hover:text-red-500';
+
+      // Escape job data for safe inline JS
+      const safeTitle = title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safeCompany = company.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safeLocation = location.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safeUrl = url.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
       return `
-        <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden" data-job-id="${jobId}">
+        <div class="card-hover bg-white rounded-xl border border-gray-200 overflow-hidden" data-job-id="${jobId}" data-job-url="${safeUrl}">
           <div class="p-4">
             <!-- Header -->
             <div class="flex items-start justify-between mb-3">
               <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold shrink-0">
                 ${company.charAt(0).toUpperCase()}
               </div>
-              <button onclick="toggleSave('${jobId}')" class="heart-btn p-2 text-gray-300 hover:text-red-500 transition" title="Save to My Applications">
-                <i class="far fa-heart text-xl"></i>
+              <button onclick="toggleSave('${jobId}', '${safeUrl}', '${safeTitle}', '${safeCompany}', '${safeLocation}')" 
+                      class="heart-btn p-2 ${heartColor} transition" 
+                      title="${isSaved ? 'Unsave' : 'Save to My Applications'}" 
+                      id="heart-${jobId}">
+                <i class="${heartClass}"></i>
               </button>
             </div>
             
@@ -565,16 +641,11 @@
             </div>
           </div>
           
-          <!-- Action Bar -->
+          <!-- Action Bar (Apply Only) -->
           <div class="bg-gray-50 px-4 py-3 border-t border-gray-100">
-            <div class="flex items-center justify-between">
-              <button onclick="toggleSave('${jobId}')" class="flex-1 mr-2 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition flex items-center justify-center">
-                <i class="far fa-heart mr-2"></i> Save
-              </button>
-              <a href="${url}" target="_blank" class="flex-1 py-2 bg-blue-600 text-white text-center font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
-                Apply <i class="fas fa-external-link-alt ml-2"></i>
-              </a>
-            </div>
+            <a href="${url}" target="_blank" class="w-full py-2.5 bg-blue-600 text-white text-center font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+              Apply Now <i class="fas fa-external-link-alt ml-2"></i>
+            </a>
           </div>
         </div>
       `;
@@ -584,7 +655,7 @@
     function createKanbanCard(job, columnIndex) {
       const title = escapeHtml(job.title || 'Untitled');
       const company = escapeHtml(job.company || 'Unknown');
-      const url = job.url || '#';
+      const url = job.url || job.link || '#';  // Backend returns 'link' for saved_jobs
       const jobId = job.id;
 
       const canMoveLeft = columnIndex > 0;
@@ -627,36 +698,92 @@
     }
 
     // --- Toggle Save (Heart Button) ---
-    async function toggleSave(jobId) {
-      const job = allJobs.find(j => j.id === jobId);
-      if (!job) return;
+    async function toggleSave(jobId, url, title, company, location) {
+      const heartBtn = document.getElementById(`heart-${jobId}`);
+      const heartIcon = heartBtn?.querySelector('i');
 
-      // Set status to 'saved'
-      job.status = 'saved';
+      // Check if already saved (by URL)
+      const isCurrentlySaved = savedJobsMap.has(url);
 
-      // Re-render immediately
-      renderJobs();
-      showToast('❤️ Job saved to My Applications!');
+      if (isCurrentlySaved) {
+        // UNSAVE: Remove from saved jobs
+        const savedJobId = savedJobsMap.get(url);
 
-      // Persist to backend
-      try {
-        await fetch('/api/update-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: jobId, status: 'saved' })
-        });
-      } catch (err) {
-        console.log('Status persist skipped:', err);
+        // Visual update immediately
+        if (heartIcon) {
+          heartIcon.className = 'far fa-heart text-xl';
+          heartBtn.classList.remove('text-red-500');
+          heartBtn.classList.add('text-gray-300', 'hover:text-red-500');
+          heartBtn.title = 'Save to My Applications';
+        }
+
+        // Remove from map
+        savedJobsMap.delete(url);
+        showToast('🗑️ Job removed from saved');
+
+        // Persist to backend
+        try {
+          await fetch(`/api/saved-jobs/${savedJobId}`, { method: 'DELETE' });
+        } catch (err) {
+          console.log('Unsave failed:', err);
+          // Revert on failure
+          savedJobsMap.set(url, savedJobId);
+        }
+
+      } else {
+        // SAVE: Add to saved jobs
+
+        // Visual update immediately
+        if (heartIcon) {
+          heartIcon.className = 'fas fa-heart text-xl';
+          heartBtn.classList.remove('text-gray-300', 'hover:text-red-500');
+          heartBtn.classList.add('text-red-500');
+          heartBtn.title = 'Unsave';
+        }
+
+        showToast('❤️ Job saved to My Applications!');
+
+        // Persist to backend with full job data (URL is the dedup key)
+        try {
+          const res = await fetch('/api/save-job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: url,
+              title: title,
+              company: company,
+              location: location
+            })
+          });
+          const data = await res.json();
+
+          // Add to map (we'll fetch the real ID on next load)
+          savedJobsMap.set(url, jobId);
+
+        } catch (err) {
+          console.log('Save failed:', err);
+          // Revert visual on failure
+          if (heartIcon) {
+            heartIcon.className = 'far fa-heart text-xl';
+            heartBtn.classList.remove('text-red-500');
+            heartBtn.classList.add('text-gray-300', 'hover:text-red-500');
+          }
+          savedJobsMap.delete(url);
+        }
       }
     }
 
     // --- Move Job (Arrow Buttons in Kanban) ---
     async function moveJob(jobId, direction) {
-      const job = allJobs.find(j => j.id === jobId);
-      if (!job) return;
+      // Look in savedJobs (Kanban uses savedJobs from API)
+      const job = savedJobs.find(j => j.id == jobId);
+      if (!job) {
+        console.log('Job not found in savedJobs:', jobId);
+        return;
+      }
 
       // Normalize status
-      let currentStatus = (job.status || 'saved').toLowerCase();
+      let currentStatus = (job.status || 'Saved').toLowerCase();
       if (currentStatus === 'interviewing') currentStatus = 'interview';
 
       const currentIndex = KANBAN_STATUSES.indexOf(currentStatus);
@@ -665,20 +792,23 @@
       if (newIndex < 0 || newIndex >= KANBAN_STATUSES.length) return;
 
       const newStatus = KANBAN_STATUSES[newIndex];
-      job.status = newStatus;
+      const capitalizedStatus = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+
+      // Update local state immediately
+      job.status = capitalizedStatus;  // Backend uses capitalized status
 
       // Re-render kanban
       renderKanban();
 
       const statusEmojis = { 'saved': '📌', 'applied': '📤', 'interview': '🎤', 'offer': '🎉' };
-      showToast(`${statusEmojis[newStatus] || '✓'} Moved to ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`);
+      showToast(`${statusEmojis[newStatus] || '✓'} Moved to ${capitalizedStatus}`);
 
       // Persist to backend
       try {
         await fetch('/api/update-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: jobId, status: newStatus })
+          body: JSON.stringify({ id: jobId, status: capitalizedStatus })
         });
       } catch (err) {
         console.log('Status persist skipped:', err);
