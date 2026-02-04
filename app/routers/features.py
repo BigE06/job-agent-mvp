@@ -617,6 +617,15 @@ RULES:
         "Question:",
     ]
     
+    # REGEX GUILLOTINE: Remove any opening sentence that looks like a pleasantry
+    # This catches variations the phrase list might miss
+    response_text = re.sub(
+        r'^(Thank you|Thanks|Great answer|Good answer|That makes sense|I understand|That\'s helpful|That\'s a good point|Interesting).*?[.!?]\s*', 
+        '', 
+        response_text, 
+        flags=re.IGNORECASE
+    ).strip()
+    
     # Force remove all bad phrases
     for phrase in BAD_PHRASES:
         response_text = response_text.replace(phrase, "")

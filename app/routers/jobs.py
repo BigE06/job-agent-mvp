@@ -238,15 +238,21 @@ def trigger_scrape(
 @router.post("/jobs/scrape-sync")
 def trigger_scrape_sync(query: str = "AI Engineer", location: str = "") -> Dict[str, Any]:
     """
-    Trigger job scraping synchronously (for testing).
-    Waits for scraper to complete before returning.
+    Trigger job scraping synchronously.
+    Returns the filtered jobs directly to fix zombie feed issue.
     
     Args:
         query: Search query (default: "AI Engineer")
         location: Location filter (e.g., "New York", "Remote")
     """
     result = run_scraper(query, location=location)
+    
+    # Get the freshly scraped and filtered jobs from the result
+    jobs = result.get('jobs', [])
+    
     return {
         "message": "Scraping complete",
-        **result
+        "added": result.get('added', 0),
+        "location": result.get('location', location),
+        "jobs": jobs  # Return jobs directly to frontend
     }

@@ -311,6 +311,7 @@ def run_scraper(query: str = "AI Engineer", country: str = "us", location: str =
             "query": query,
             "location": location,
             "source": "Adzuna",
+            "jobs": jobs,  # Return filtered jobs directly
         }
         
     except Exception as e:

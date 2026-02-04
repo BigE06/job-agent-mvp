@@ -1057,10 +1057,11 @@
       btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Searching...';
       btn.disabled = true;
 
-      // CLEAR existing jobs before search (fix accumulation bug)
+      // STEP 1: WIPE - Clear existing jobs BEFORE search
       allJobs = [];
       document.getElementById('jobs-container').innerHTML = '';
       document.getElementById('job-count').textContent = 'Searching...';
+      document.getElementById('loading').classList.remove('hidden');
 
       try {
         let url = `/jobs/scrape-sync?query=${encodeURIComponent(query)}`;
@@ -1071,13 +1072,22 @@
 
         const added = data.added || 0;
         const loc = data.location || location || 'any location';
-        showToast(`✅ Found ${added} new jobs for "${query}" in ${loc}!`);
 
-        // Switch to feed tab and reload fresh
+        // STEP 2: USE RETURNED JOBS DIRECTLY (no stale data from /jobs)
+        const freshJobs = data.jobs || [];
+        allJobs = freshJobs;
+
+        console.log(`✅ Search returned ${freshJobs.length} filtered jobs`);
+        showToast(`✅ Found ${freshJobs.length} jobs for "${query}" in ${loc}!`);
+
+        // STEP 3: RENDER - Switch to feed tab and render fresh jobs
+        document.getElementById('loading').classList.add('hidden');
         currentTab = 'feed';
         switchTab('feed');
-        loadJobs();
+        renderJobs();
+
       } catch (err) {
+        document.getElementById('loading').classList.add('hidden');
         showToast(`❌ Search failed: ${err.message}`, 'error');
       } finally {
         btn.innerHTML = originalHTML;
