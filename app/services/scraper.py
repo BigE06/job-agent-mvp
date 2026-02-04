@@ -102,7 +102,25 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
         logger.warning("⚠️ Adzuna API credentials not configured.")
         return []
     
-    url = f"{ADZUNA_BASE_URL}/{country}/search/1"
+    # --- DYNAMIC REGION DETECTION ---
+    # Check if location indicates UK/GB region
+    location_lower = location.lower() if location else ""
+    UK_INDICATORS = [
+        'london', 'manchester', 'birmingham', 'edinburgh', 'glasgow', 
+        'liverpool', 'bristol', 'leeds', 'sheffield', 'newcastle',
+        'nottingham', 'cardiff', 'belfast', 'oxford', 'cambridge',
+        'uk', 'united kingdom', 'england', 'scotland', 'wales', 'gb'
+    ]
+    
+    detected_country = country  # Default
+    for uk_city in UK_INDICATORS:
+        if uk_city in location_lower:
+            detected_country = "gb"
+            print(f"[SEARCH] Switching Region to: GB (detected '{uk_city}' in location)")
+            logger.info(f"[SEARCH] Switching Region to: GB (detected '{uk_city}')")
+            break
+    
+    url = f"{ADZUNA_BASE_URL}/{detected_country}/search/1"
     
     params = {
         "app_id": ADZUNA_APP_ID,
@@ -116,7 +134,7 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
     if location and location.strip():
         params["where"] = location.strip()
     
-    logger.info(f"🔍 Searching Adzuna: query='{query}', location='{location}'")
+    logger.info(f"🔍 Searching Adzuna ({detected_country.upper()}): query='{query}', location='{location}'")
     
     try:
         with httpx.Client(timeout=30.0) as client:

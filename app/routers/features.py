@@ -509,6 +509,184 @@ async def interview_start(data: dict = Body(...)):
     }
 
 
+# =============================================
+# DETERMINISTIC INTERVIEW (5 Questions Upfront)
+# =============================================
+@router.post("/interview/generate-questions")
+async def interview_generate_questions(data: dict = Body(...)):
+    """
+    Generate exactly 5 interview questions upfront.
+    Frontend iterates through them without waiting for AI between turns.
+    """
+    import re
+    import json
+    from app.services.ai import client, OPENAI_API_KEY
+    
+    job_id = data.get('job_id')
+    resume_text = data.get('resume_text', '')
+    
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Clean job title for prompt
+    raw_title = job.get('title', 'Role')
+    clean_title = re.sub(r'\$[\d,]+.*', '', raw_title)
+    clean_title = re.sub(r'\s*[-–—]\s*(?:Remote|Hybrid|Full-?time).*', '', clean_title, flags=re.IGNORECASE)
+    clean_title = clean_title.strip()[:50] or 'the role'
+    
+    company = job.get('company', 'the company')
+    description = job.get('description', '')[:2000]
+    
+    # Build prompt
+    system_prompt = """You are a strict interview question generator.
+Generate exactly 5 professional interview questions for a job candidate.
+Return ONLY a raw JSON array of strings with no additional text.
+
+Example output format:
+["Question 1?", "Question 2?", "Question 3?", "Question 4?", "Question 5?"]
+
+Rules:
+- Questions must be relevant to the job and resume
+- Mix behavioral, technical, and situational questions
+- Keep each question to 1-2 sentences
+- NO pleasantries or filler text
+- Output ONLY the JSON array, nothing else"""
+
+    user_prompt = f"""JOB: {clean_title} at {company}
+
+JOB DESCRIPTION:
+{description[:1500] if description else 'Not provided'}
+
+CANDIDATE RESUME:
+{resume_text[:1500] if resume_text else 'Not provided'}
+
+Generate 5 interview questions:"""
+
+    # Default fallback questions
+    FALLBACK_QUESTIONS = [
+        f"Tell me about yourself and why you're interested in the {clean_title} role at {company}?",
+        "Can you describe a challenging project you worked on and how you handled it?",
+        "How do you prioritize tasks when you have multiple deadlines?",
+        "Tell me about a time you had to learn a new skill quickly. How did you approach it?",
+        "What questions do you have about this role or our team?"
+    ]
+    
+    try:
+        if not client:
+            logger.warning("[INTERVIEW] No AI client, using fallback questions")
+            return {"questions": FALLBACK_QUESTIONS}
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        raw_output = response.choices[0].message.content.strip()
+        logger.info(f"[INTERVIEW] Raw AI output: {raw_output[:200]}")
+        
+        # Parse JSON array from response
+        # Handle cases where AI adds extra text
+        json_match = re.search(r'\[.*\]', raw_output, re.DOTALL)
+        if json_match:
+            questions = json.loads(json_match.group())
+            if isinstance(questions, list) and len(questions) >= 5:
+                return {"questions": questions[:5]}
+        
+        # AI failed to return valid JSON
+        logger.warning("[INTERVIEW] AI didn't return valid JSON, using fallback")
+        return {"questions": FALLBACK_QUESTIONS}
+        
+    except Exception as e:
+        logger.error(f"[INTERVIEW] Generate questions error: {e}")
+        return {"questions": FALLBACK_QUESTIONS}
+
+
+@router.post("/interview/analyze")
+async def interview_analyze(data: dict = Body(...)):
+    """
+    Analyze completed interview conversation and generate feedback report.
+    """
+    from app.services.ai import get_gpt_response
+    
+    job_id = data.get('job_id')
+    conversation = data.get('conversation', [])  # List of {question, answer} pairs
+    
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    if len(conversation) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 Q&A pairs to analyze")
+    
+    job = get_job_by_id(str(job_id))
+    job_title = job.get('title', 'Role') if job else 'Role'
+    company = job.get('company', 'Company') if job else 'Company'
+    
+    # Build conversation text
+    conv_text = ""
+    for i, qa in enumerate(conversation, 1):
+        q = qa.get('question', '')
+        a = qa.get('answer', '')
+        conv_text += f"Q{i}: {q}\nA{i}: {a}\n\n"
+    
+    system_prompt = """You are an expert interview coach analyzing a mock interview.
+Provide structured, actionable feedback in this exact format:
+
+## Overall Score: X/10
+
+## Strengths
+- [Specific strength 1]
+- [Specific strength 2]
+
+## Areas for Improvement
+- [Area 1]: [Specific suggestion]
+- [Area 2]: [Specific suggestion]
+
+## Best Answer
+[Quote the strongest answer and explain why]
+
+## Answer to Improve
+[Quote the weakest answer and provide a better example]
+
+## Key Recommendations
+1. [Top recommendation]
+2. [Second recommendation]
+3. [Third recommendation]
+
+Be specific, reference actual answers, and provide actionable advice."""
+
+    user_prompt = f"""Analyze this interview for {job_title} at {company}:
+
+{conv_text}
+
+Provide detailed feedback:"""
+
+    try:
+        feedback = get_gpt_response(system_prompt, user_prompt, max_tokens=1000)
+        return {
+            "feedback": feedback,
+            "job_title": job_title,
+            "company": company,
+            "questions_answered": len(conversation)
+        }
+    except Exception as e:
+        logger.error(f"[INTERVIEW] Analysis error: {e}")
+        return {
+            "feedback": "## Analysis Unavailable\n\nWe couldn't generate detailed feedback at this time. Please try again.",
+            "job_title": job_title,
+            "company": company,
+            "questions_answered": len(conversation)
+        }
+
+
 @router.post("/interview/chat")
 async def interview_chat(data: dict = Body(...)):
     """Continue the interview conversation with follow-up questions."""

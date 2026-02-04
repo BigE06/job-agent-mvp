@@ -1371,13 +1371,17 @@
       }
     }
 
-    // --- Futuristic Voice Interview State ---
+    // --- Deterministic Interview State Machine ---
     let currentInterviewJobId = null;
-    let interviewHistory = [];
-    let interviewQuestionCount = 0;
+    let interviewQuestions = [];      // Pre-generated 5 questions
+    let userAnswers = [];             // User's answers
+    let currentQuestionIndex = 0;     // Current question (0-4)
     const MAX_QUESTIONS = 5;
     let speechRecognition = null;
     let currentTranscript = '';
+    // Legacy support
+    let interviewHistory = [];
+    let interviewQuestionCount = 0;
 
     async function startInterview(jobId) {
       // Auto-save if from Feed
@@ -1390,26 +1394,42 @@
       const btn = document.getElementById(`btn-interview-${jobId}`) || document.getElementById(`btn-interview-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
         btn.classList.add('btn-loading');
       }
 
       try {
-        const res = await fetch('/api/interview/start', {
+        // STEP 1: Generate all 5 questions upfront (DETERMINISTIC)
+        const res = await fetch('/api/interview/generate-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: savedId })
+          body: JSON.stringify({ job_id: savedId, resume_text: '' })
         });
         const data = await res.json();
 
         if (data.error) {
           showToast('❌ ' + data.error, 'error');
-        } else {
-          currentInterviewJobId = savedId;
-          interviewHistory = [];
-          interviewQuestionCount = 1;
-          openInterviewModal(data.job_title || 'Interview Practice', data.question);
+          return;
         }
+
+        // STEP 2: Initialize state machine
+        currentInterviewJobId = savedId;
+        interviewQuestions = data.questions || [];
+        userAnswers = [];
+        currentQuestionIndex = 0;
+        interviewHistory = [];
+        interviewQuestionCount = 1;
+
+        if (interviewQuestions.length === 0) {
+          showToast('❌ Could not generate questions', 'error');
+          return;
+        }
+
+        console.log('✅ Generated interview questions:', interviewQuestions);
+
+        // STEP 3: Open modal with first question
+        openInterviewModal('Interview Practice', interviewQuestions[0]);
+
       } catch (err) {
         showToast('❌ ' + err.message, 'error');
       } finally {
@@ -1444,6 +1464,9 @@
     function closeInterviewModal() {
       document.getElementById('interview-modal').classList.add('hidden');
       currentInterviewJobId = null;
+      interviewQuestions = [];
+      userAnswers = [];
+      currentQuestionIndex = 0;
       interviewHistory = [];
       interviewQuestionCount = 0;
 
@@ -1584,7 +1607,8 @@
       }, 500);
     }
 
-    async function submitAnswer() {
+    function submitAnswer() {
+      // DETERMINISTIC STATE MACHINE - No AI calls between questions
       const processingEl = document.getElementById('interview-processing');
       const questionEl = document.getElementById('interview-question');
       const counterEl = document.getElementById('interview-counter');
@@ -1599,53 +1623,39 @@
         return;
       }
 
-      // Save to history (but don't display - hidden transcript)
+      // STEP 1: Save answer to array
+      userAnswers.push({
+        question: interviewQuestions[currentQuestionIndex],
+        answer: answer
+      });
+
+      // Legacy history support
       interviewHistory.push({ role: 'user', message: answer });
 
-      try {
-        const res = await fetch('/api/interview/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_id: currentInterviewJobId,
-            answer: answer,
-            history: interviewHistory
-          })
-        });
-        const data = await res.json();
+      processingEl.classList.add('hidden');
 
-        processingEl.classList.add('hidden');
+      // STEP 2: Move to next question
+      currentQuestionIndex++;
+      interviewQuestionCount++;
 
-        if (data.error) {
-          statusEl.textContent = 'Error occurred. Let\'s try again.';
-          document.getElementById('btn-start-recording').classList.remove('hidden');
-          return;
-        }
-
-        // Get next question
-        const nextQuestion = data.feedback || data.next_question || data.response || 'Thank you for your answer. Let me ask another question.';
-        interviewHistory.push({ role: 'interviewer', message: nextQuestion });
-        interviewQuestionCount++;
-
-        // Check if interview complete
-        if (interviewQuestionCount > MAX_QUESTIONS) {
-          showInterviewComplete();
-          return;
-        }
-
-        // Update UI for next question
-        counterEl.textContent = `Question ${interviewQuestionCount} of ${MAX_QUESTIONS}`;
-        questionEl.className = 'text-xl text-gray-800 leading-relaxed font-medium fade-in';
-        questionEl.textContent = nextQuestion;
-
-        // Speak next question
-        speakQuestion(nextQuestion);
-
-      } catch (err) {
-        processingEl.classList.add('hidden');
-        statusEl.textContent = 'Connection error. Tap to retry.';
-        document.getElementById('btn-start-recording').classList.remove('hidden');
+      // STEP 3: Check if interview complete
+      if (currentQuestionIndex >= interviewQuestions.length) {
+        console.log('✅ Interview complete. Answers:', userAnswers);
+        showInterviewComplete();
+        return;
       }
+
+      // STEP 4: Show next pre-generated question (NO AI CALL!)
+      const nextQuestion = interviewQuestions[currentQuestionIndex];
+      interviewHistory.push({ role: 'interviewer', message: nextQuestion });
+
+      // Update UI
+      counterEl.textContent = `Question ${currentQuestionIndex + 1} of ${MAX_QUESTIONS}`;
+      questionEl.className = 'text-xl text-gray-800 leading-relaxed font-medium fade-in';
+      questionEl.textContent = nextQuestion;
+
+      // Speak next question
+      speakQuestion(nextQuestion);
     }
 
     function showInterviewComplete() {
@@ -1656,12 +1666,13 @@
       showToast('📊 Generating interview analysis...');
 
       try {
+        // Send the properly formatted conversation (question/answer pairs)
         const res = await fetch('/api/interview/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             job_id: currentInterviewJobId,
-            history: interviewHistory
+            conversation: userAnswers  // Array of {question, answer} objects
           })
         });
         const data = await res.json();
@@ -1671,11 +1682,11 @@
         if (data.error) {
           showResult('Interview Analysis', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
         } else {
-          const analysis = data.analysis || data.feedback || 'Great practice session!';
+          const analysis = data.feedback || 'Great practice session!';
           currentResultText = analysis;
           showResult('📊 Interview Analysis', `
-            <div class="bg-gray-50 rounded-lg p-6 whitespace-pre-wrap text-gray-800 leading-relaxed">
-              ${escapeHtml(analysis)}
+            <div class="bg-gray-50 rounded-lg p-6 whitespace-pre-wrap text-gray-800 leading-relaxed prose max-w-none">
+              ${escapeHtml(analysis).replace(/##/g, '<h3 class="text-lg font-bold mt-4 mb-2">').replace(/\n/g, '<br>')}
             </div>
           `);
         }
