@@ -667,21 +667,13 @@ async def analyze_job_match(data: dict = Body(...)):
         job_description = fallback_description[:3000] if fallback_description else ''
     
     # If no resume provided, try to get from profile
-    if not resume_text:
-        try:
-            from app.database import SessionLocal
-            from app.models import UserProfile
-            db = SessionLocal()
-            profile = db.query(UserProfile).first()
-            if profile and profile.resume_text:
-                resume_text = profile.resume_text
-            db.close()
-        except Exception as e:
-            logger.warning(f"[ATS] Could not fetch profile: {e}")
+    # PRIORITIZE: Use resume_text from frontend payload (pre-fetched by client)
+    # Frontend now fetches profile first and passes resume_text explicitly
+    # This avoids the broken SessionLocal import issue
     
-    if not resume_text:
+    if not resume_text or len(resume_text) < 50:
         return {
-            "error": "No resume found. Please upload your resume in your profile first.",
+            "error": "No resume found. Please upload your resume in the Profile section first.",
             "match_score": 0
         }
     
