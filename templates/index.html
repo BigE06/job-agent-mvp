@@ -675,7 +675,6 @@
 
       const canMoveLeft = columnIndex > 0;
       const canMoveRight = columnIndex < KANBAN_STATUSES.length - 1;
-      const isSavedColumn = columnIndex === 0;  // Show delete only in Saved column
 
       return `
         <div class="kanban-card bg-white rounded-lg border border-gray-200 p-3 shadow-sm" data-job-id="${jobId}">
@@ -689,11 +688,9 @@
               <a href="${url}" target="_blank" class="text-gray-400 hover:text-blue-500 p-1" title="View Job">
                 <i class="fas fa-external-link-alt text-xs"></i>
               </a>
-              ${isSavedColumn ? `
-                <button onclick="deleteJob(${jobId})" class="text-gray-400 hover:text-red-500 p-1" title="Remove from saved">
-                  <i class="fas fa-trash-alt text-xs"></i>
-                </button>
-              ` : ''}
+              <button onclick="deleteJob(${jobId})" class="text-gray-400 hover:text-red-500 p-1" title="Remove from saved">
+                <i class="fas fa-trash-alt text-xs"></i>
+              </button>
             </div>
           </div>
           
@@ -890,6 +887,11 @@
       btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Searching...';
       btn.disabled = true;
 
+      // CLEAR existing jobs before search (fix accumulation bug)
+      allJobs = [];
+      document.getElementById('jobs-container').innerHTML = '';
+      document.getElementById('job-count').textContent = 'Searching...';
+
       try {
         let url = `/jobs/scrape-sync?query=${encodeURIComponent(query)}`;
         if (location) url += `&location=${encodeURIComponent(location)}`;
@@ -901,7 +903,7 @@
         const loc = data.location || location || 'any location';
         showToast(`✅ Found ${added} new jobs for "${query}" in ${loc}!`);
 
-        // Switch to feed tab and reload
+        // Switch to feed tab and reload fresh
         currentTab = 'feed';
         switchTab('feed');
         loadJobs();
@@ -1003,7 +1005,71 @@
     });
 
     // --- AI Feature Functions ---
+
+    // Helper: Ensure job is saved before AI action (fixes "Click = Nothing" bug on Feed jobs)
+    async function ensureJobSaved(jobId) {
+      // Find the job in allJobs (feed) to get its data
+      const job = allJobs.find(j => j.id == jobId);
+      if (!job) {
+        // Job might already be in savedJobs (Kanban view)
+        const savedJob = savedJobs.find(j => j.id == jobId);
+        if (savedJob) return jobId;  // Already saved, return existing ID
+        console.log('Job not found:', jobId);
+        return null;
+      }
+
+      const url = job.url || '';
+
+      // If already saved, return the saved ID
+      if (savedJobsMap.has(url)) {
+        return savedJobsMap.get(url);
+      }
+
+      // Auto-save the job first
+      try {
+        const res = await fetch('/api/save-job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: url,
+            title: job.title || 'Untitled',
+            company: job.company || 'Unknown',
+            location: job.location || 'Remote'
+          })
+        });
+        const data = await res.json();
+        const newJobId = data.id || jobId;
+
+        // Update savedJobsMap
+        savedJobsMap.set(url, newJobId);
+
+        // Update heart icon to red
+        const heartBtn = document.getElementById(`heart-${jobId}`);
+        const heartIcon = heartBtn?.querySelector('i');
+        if (heartIcon) {
+          heartIcon.className = 'fas fa-heart text-xl';
+          heartBtn.classList.remove('text-gray-300', 'hover:text-red-500');
+          heartBtn.classList.add('text-red-500');
+          heartBtn.title = 'Unsave';
+        }
+
+        showToast('❤️ Job auto-saved!');
+        return newJobId;
+
+      } catch (err) {
+        console.log('Auto-save failed:', err);
+        return jobId;  // Try with original ID anyway
+      }
+    }
+
     async function draftEmail(jobId) {
+      // Auto-save if from Feed
+      const savedId = await ensureJobSaved(jobId);
+      if (!savedId) {
+        showToast('❌ Could not find job', 'error');
+        return;
+      }
+
       const btn = document.getElementById(`btn-email-${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1015,7 +1081,7 @@
         const res = await fetch('/api/generate-cold-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId })
+          body: JSON.stringify({ job_id: savedId })  // Use savedId
         });
         const data = await res.json();
 
@@ -1047,6 +1113,13 @@
     }
 
     async function generateCoverLetter(jobId) {
+      // Auto-save if from Feed
+      const savedId = await ensureJobSaved(jobId);
+      if (!savedId) {
+        showToast('❌ Could not find job', 'error');
+        return;
+      }
+
       const btn = document.getElementById(`btn-cover-${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1058,7 +1131,7 @@
         const res = await fetch('/api/generate-cover-letter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId })
+          body: JSON.stringify({ job_id: savedId })  // Use savedId
         });
         const data = await res.json();
 
@@ -1082,6 +1155,13 @@
     }
 
     async function tailorCV(jobId) {
+      // Auto-save if from Feed
+      const savedId = await ensureJobSaved(jobId);
+      if (!savedId) {
+        showToast('❌ Could not find job', 'error');
+        return;
+      }
+
       const btn = document.getElementById(`btn-cv-${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1093,7 +1173,7 @@
         const res = await fetch('/api/generate-curated-cv', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId, gap_answers: [] })
+          body: JSON.stringify({ job_id: savedId, gap_answers: [] })  // Use savedId
         });
         const data = await res.json();
 
@@ -1118,6 +1198,13 @@
     }
 
     async function startInterview(jobId) {
+      // Auto-save if from Feed
+      const savedId = await ensureJobSaved(jobId);
+      if (!savedId) {
+        showToast('❌ Could not find job', 'error');
+        return;
+      }
+
       const btn = document.getElementById(`btn-interview-${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1129,7 +1216,7 @@
         const res = await fetch('/api/interview/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId })
+          body: JSON.stringify({ job_id: savedId })  // Use savedId
         });
         const data = await res.json();
 
