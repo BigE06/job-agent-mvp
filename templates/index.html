@@ -360,6 +360,51 @@
       </div>
     </div>
   </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- INTERVIEW CHAT MODAL -->
+  <!-- ======================== -->
+  <div id="interview-modal" class="fixed inset-0 z-50 hidden">
+    <div class="modal-backdrop absolute inset-0 bg-black/40" onclick="closeInterviewModal()"></div>
+    <div
+      class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-4 border-b bg-purple-600 text-white shrink-0">
+        <div>
+          <h2 class="text-lg font-bold flex items-center">
+            <i class="fas fa-microphone mr-2"></i> Interview Practice
+          </h2>
+          <p id="interview-job-title" class="text-purple-200 text-sm"></p>
+        </div>
+        <button onclick="closeInterviewModal()" class="text-white/80 hover:text-white p-2">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+
+      <!-- Chat History -->
+      <div id="interview-chat" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <!-- Messages will appear here -->
+      </div>
+
+      <!-- Input Area -->
+      <div class="p-4 border-t bg-white shrink-0">
+        <div class="flex gap-2">
+          <textarea id="interview-input" rows="2"
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+            placeholder="Type your answer..."></textarea>
+          <button onclick="sendInterviewAnswer()" id="interview-send-btn"
+            class="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition flex items-center">
+            <i class="fas fa-paper-plane mr-2"></i> Send
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          <i class="fas fa-lightbulb text-yellow-500 mr-1"></i> Tip: Use the STAR method (Situation, Task, Action,
+          Result)
+        </p>
+      </div>
+    </div>
+  </div>
 
   <script>
     // =============================================
@@ -641,16 +686,16 @@
             
             <!-- AI Action Buttons (2x2 Grid) -->
             <div class="grid grid-cols-2 gap-2 mb-3">
-              <button onclick="tailorCV('${jobId}')" class="py-2 px-3 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+              <button id="btn-cv-${jobId}" onclick="tailorCV('${jobId}')" class="py-2 px-3 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
                 <i class="fas fa-file-alt mr-1.5"></i> Tailor CV
               </button>
-              <button onclick="draftEmail('${jobId}')" class="py-2 px-3 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+              <button id="btn-email-${jobId}" onclick="draftEmail('${jobId}')" class="py-2 px-3 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center justify-center">
                 <i class="fas fa-envelope mr-1.5"></i> Draft Email
               </button>
-              <button onclick="generateCoverLetter('${jobId}')" class="py-2 px-3 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
+              <button id="btn-cover-${jobId}" onclick="generateCoverLetter('${jobId}')" class="py-2 px-3 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
                 <i class="fas fa-file-signature mr-1.5"></i> Cover Letter
               </button>
-              <button onclick="startInterview('${jobId}')" class="py-2 px-3 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition flex items-center justify-center">
+              <button id="btn-interview-${jobId}" onclick="startInterview('${jobId}')" class="py-2 px-3 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition flex items-center justify-center">
                 <i class="fas fa-microphone mr-1.5"></i> Interview Prep
               </button>
             </div>
@@ -696,16 +741,16 @@
           
           <!-- AI Action Buttons (2x2 Grid) -->
           <div class="grid grid-cols-2 gap-1.5 mb-3">
-            <button onclick="tailorCV('${jobId}')" class="py-1.5 px-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition flex items-center justify-center">
+            <button id="btn-cv-k${jobId}" onclick="tailorCV('${jobId}')" class="py-1.5 px-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition flex items-center justify-center">
               <i class="fas fa-file-alt mr-1"></i> CV
             </button>
-            <button onclick="draftEmail('${jobId}')" class="py-1.5 px-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition flex items-center justify-center">
+            <button id="btn-email-k${jobId}" onclick="draftEmail('${jobId}')" class="py-1.5 px-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition flex items-center justify-center">
               <i class="fas fa-envelope mr-1"></i> Email
             </button>
-            <button onclick="generateCoverLetter('${jobId}')" class="py-1.5 px-2 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 transition flex items-center justify-center">
+            <button id="btn-cover-k${jobId}" onclick="generateCoverLetter('${jobId}')" class="py-1.5 px-2 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 transition flex items-center justify-center">
               <i class="fas fa-file-signature mr-1"></i> Cover
             </button>
-            <button onclick="startInterview('${jobId}')" class="py-1.5 px-2 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition flex items-center justify-center">
+            <button id="btn-interview-k${jobId}" onclick="startInterview('${jobId}')" class="py-1.5 px-2 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition flex items-center justify-center">
               <i class="fas fa-microphone mr-1"></i> Interview
             </button>
           </div>
@@ -1070,7 +1115,7 @@
         return;
       }
 
-      const btn = document.getElementById(`btn-email-${jobId}`);
+      const btn = document.getElementById(`btn-email-${jobId}`) || document.getElementById(`btn-email-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -1120,7 +1165,7 @@
         return;
       }
 
-      const btn = document.getElementById(`btn-cover-${jobId}`);
+      const btn = document.getElementById(`btn-cover-${jobId}`) || document.getElementById(`btn-cover-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -1162,7 +1207,7 @@
         return;
       }
 
-      const btn = document.getElementById(`btn-cv-${jobId}`);
+      const btn = document.getElementById(`btn-cv-${jobId}`) || document.getElementById(`btn-cv-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -1197,6 +1242,10 @@
       }
     }
 
+    // --- Interview Chat State ---
+    let currentInterviewJobId = null;
+    let interviewHistory = [];
+
     async function startInterview(jobId) {
       // Auto-save if from Feed
       const savedId = await ensureJobSaved(jobId);
@@ -1205,7 +1254,7 @@
         return;
       }
 
-      const btn = document.getElementById(`btn-interview-${jobId}`);
+      const btn = document.getElementById(`btn-interview-${jobId}`) || document.getElementById(`btn-interview-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -1216,29 +1265,108 @@
         const res = await fetch('/api/interview/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: savedId })  // Use savedId
+          body: JSON.stringify({ job_id: savedId })
         });
         const data = await res.json();
 
         if (data.error) {
-          showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+          showToast('❌ ' + data.error, 'error');
         } else {
-          currentResultText = data.question || '';
-          showResult(`🎤 Interview: ${escapeHtml(data.job_title)}`, `
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5 mb-4">
-                            <p class="text-sm text-blue-600 font-medium mb-2">Interviewer:</p>
-                            <p class="text-lg text-gray-900">${escapeHtml(data.question)}</p>
-                        </div>
-                        <p class="text-sm text-gray-500"><i class="fas fa-lightbulb mr-1 text-yellow-500"></i> Practice using the STAR method.</p>
-                    `);
+          // Open Interview Chat Modal
+          currentInterviewJobId = savedId;
+          interviewHistory = [];
+          openInterviewModal(data.job_title || 'Interview Practice', data.question);
         }
       } catch (err) {
-        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+        showToast('❌ ' + err.message, 'error');
       } finally {
         if (btn && originalHTML) {
           btn.innerHTML = originalHTML;
           btn.classList.remove('btn-loading');
         }
+      }
+    }
+
+    function openInterviewModal(jobTitle, firstQuestion) {
+      document.getElementById('interview-job-title').textContent = jobTitle;
+      document.getElementById('interview-chat').innerHTML = '';
+      document.getElementById('interview-input').value = '';
+
+      // Add first question from interviewer
+      addChatMessage('interviewer', firstQuestion);
+
+      document.getElementById('interview-modal').classList.remove('hidden');
+    }
+
+    function closeInterviewModal() {
+      document.getElementById('interview-modal').classList.add('hidden');
+      currentInterviewJobId = null;
+      interviewHistory = [];
+    }
+
+    function addChatMessage(role, message) {
+      const chatDiv = document.getElementById('interview-chat');
+      const isInterviewer = role === 'interviewer';
+
+      const msgHtml = `
+        <div class="flex ${isInterviewer ? 'justify-start' : 'justify-end'}">
+          <div class="${isInterviewer ? 'bg-white border border-gray-200' : 'bg-purple-600 text-white'} rounded-lg px-4 py-3 max-w-[85%] shadow-sm">
+            ${isInterviewer ? '<p class="text-xs text-purple-600 font-medium mb-1"><i class="fas fa-user-tie mr-1"></i> Interviewer</p>' : ''}
+            <p class="text-sm leading-relaxed">${escapeHtml(message)}</p>
+          </div>
+        </div>
+      `;
+
+      chatDiv.insertAdjacentHTML('beforeend', msgHtml);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+
+      interviewHistory.push({ role, message });
+    }
+
+    async function sendInterviewAnswer() {
+      const input = document.getElementById('interview-input');
+      const answer = input.value.trim();
+
+      if (!answer) {
+        input.focus();
+        return;
+      }
+
+      // Add user message
+      addChatMessage('user', answer);
+      input.value = '';
+
+      // Show loading
+      const sendBtn = document.getElementById('interview-send-btn');
+      const originalBtnHTML = sendBtn.innerHTML;
+      sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/interview/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: currentInterviewJobId,
+            answer: answer,
+            history: interviewHistory
+          })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          addChatMessage('interviewer', 'Sorry, I encountered an error. Let\'s try again.');
+        } else {
+          // Add interviewer response
+          const response = data.feedback || data.next_question || data.response || 'Thank you for your answer.';
+          addChatMessage('interviewer', response);
+        }
+      } catch (err) {
+        addChatMessage('interviewer', 'Connection error. Please try again.');
+      } finally {
+        sendBtn.innerHTML = originalBtnHTML;
+        sendBtn.disabled = false;
+        input.focus();
       }
     }
 
