@@ -624,6 +624,147 @@ Generate 5 interview questions:"""
         return {"questions": FALLBACK_QUESTIONS}
 
 
+# =============================================
+# ATS MATCH SCORING
+# =============================================
+@router.post("/job/analyze-match")
+async def analyze_job_match(data: dict = Body(...)):
+    """
+    Compare resume against job description and return ATS match score.
+    Returns structured JSON for visual report card.
+    """
+    import re
+    import json
+    from app.services.ai import client, OPENAI_API_KEY
+    
+    job_id = data.get('job_id')
+    resume_text = data.get('resume_text', '')
+    
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+    
+    job = get_job_by_id(str(job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_title = job.get('title', 'Role')
+    company = job.get('company', 'Company')
+    job_description = job.get('description', '')[:3000]
+    
+    # If no resume provided, try to get from profile
+    if not resume_text:
+        try:
+            from app.database import SessionLocal
+            from app.models import UserProfile
+            db = SessionLocal()
+            profile = db.query(UserProfile).first()
+            if profile and profile.resume_text:
+                resume_text = profile.resume_text
+            db.close()
+        except Exception as e:
+            logger.warning(f"[ATS] Could not fetch profile: {e}")
+    
+    if not resume_text:
+        return {
+            "error": "No resume found. Please upload your resume in your profile first.",
+            "match_score": 0
+        }
+    
+    # --- STRUCTURED JSON PROMPT ---
+    system_prompt = """You are an ATS (Applicant Tracking System) expert. Analyze how well a resume matches a job description.
+
+Return ONLY a valid JSON object (no markdown, no explanation):
+{
+  "match_score": 75,
+  "matching_strengths": ["Skill 1", "Skill 2", "Skill 3"],
+  "missing_skills": ["Skill A", "Skill B"],
+  "experience_match": "Strong",
+  "recommendation": "Good fit"
+}
+
+RULES:
+- match_score: 0-100 (how well resume matches job requirements)
+- matching_strengths: Max 4 items, skills the candidate HAS that match the job (under 5 words each)
+- missing_skills: Max 4 items, key skills the job requires that are NOT in resume (under 5 words each)
+- experience_match: "Strong", "Moderate", or "Weak"
+- recommendation: "Strong fit", "Good fit", "Partial fit", or "Needs work"
+
+Return ONLY the JSON object. No other text."""
+
+    user_prompt = f"""JOB: {job_title} at {company}
+
+JOB DESCRIPTION:
+{job_description[:2000] if job_description else 'Not available'}
+
+CANDIDATE RESUME:
+{resume_text[:2000]}
+
+Analyze the match and return JSON:"""
+
+    # Default fallback
+    FALLBACK_ANALYSIS = {
+        "match_score": 50,
+        "matching_strengths": ["Relevant experience", "Good communication"],
+        "missing_skills": ["Review job requirements"],
+        "experience_match": "Moderate",
+        "recommendation": "Partial fit"
+    }
+
+    try:
+        if not client:
+            logger.warning("[ATS] No AI client, using fallback")
+            return {
+                "analysis": FALLBACK_ANALYSIS,
+                "job_title": job_title,
+                "company": company
+            }
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=400
+        )
+        
+        raw_output = response.choices[0].message.content.strip()
+        logger.info(f"[ATS] Raw output: {raw_output[:200]}")
+        
+        # Parse JSON - handle markdown code blocks
+        json_str = raw_output
+        if "```json" in raw_output:
+            match = re.search(r'```json\s*(.*?)\s*```', raw_output, re.DOTALL)
+            json_str = match.group(1) if match else raw_output
+        elif "```" in raw_output:
+            match = re.search(r'```\s*(.*?)\s*```', raw_output, re.DOTALL)
+            json_str = match.group(1) if match else raw_output
+        
+        try:
+            analysis = json.loads(json_str)
+            if "match_score" in analysis:
+                return {
+                    "analysis": analysis,
+                    "job_title": job_title,
+                    "company": company
+                }
+        except json.JSONDecodeError as je:
+            logger.warning(f"[ATS] JSON parse error: {je}")
+        
+        return {
+            "analysis": FALLBACK_ANALYSIS,
+            "job_title": job_title,
+            "company": company
+        }
+        
+    except Exception as e:
+        logger.error(f"[ATS] Analysis error: {e}")
+        return {
+            "analysis": FALLBACK_ANALYSIS,
+            "job_title": job_title,
+            "company": company
+        }
 
 
 

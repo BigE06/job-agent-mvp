@@ -809,7 +809,7 @@
               ${salaryText ? `<span class="text-green-600 font-semibold">${salaryText}</span>` : '<span class="text-gray-400 text-xs">Salary not listed</span>'}
             </div>
             
-            <!-- AI Action Buttons (2x2 Grid) -->
+            <!-- AI Action Buttons (2x3 Grid) -->
             <div class="grid grid-cols-2 gap-2 mb-3">
               <button id="btn-cv-${jobId}" onclick="tailorCV('${jobId}')" class="py-2 px-3 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
                 <i class="fas fa-file-alt mr-1.5"></i> Tailor CV
@@ -822,6 +822,9 @@
               </button>
               <button id="btn-interview-${jobId}" onclick="startInterview('${jobId}')" class="py-2 px-3 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition flex items-center justify-center">
                 <i class="fas fa-microphone mr-1.5"></i> Interview Prep
+              </button>
+              <button id="btn-match-${jobId}" onclick="checkATSMatch('${jobId}')" class="col-span-2 py-2 px-3 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600 transition flex items-center justify-center">
+                <i class="fas fa-chart-pie mr-1.5"></i> Check ATS Match
               </button>
             </div>
           </div>
@@ -864,7 +867,7 @@
             </div>
           </div>
           
-          <!-- AI Action Buttons (2x2 Grid) -->
+          <!-- AI Action Buttons (2x3 Grid) -->
           <div class="grid grid-cols-2 gap-1.5 mb-3">
             <button id="btn-cv-k${jobId}" onclick="tailorCV('${jobId}')" class="py-1.5 px-2 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition flex items-center justify-center">
               <i class="fas fa-file-alt mr-1"></i> CV
@@ -877,6 +880,9 @@
             </button>
             <button id="btn-interview-k${jobId}" onclick="startInterview('${jobId}')" class="py-1.5 px-2 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition flex items-center justify-center">
               <i class="fas fa-microphone mr-1"></i> Interview
+            </button>
+            <button id="btn-match-k${jobId}" onclick="checkATSMatch('${jobId}')" class="col-span-2 py-1.5 px-2 bg-amber-500 text-white text-xs font-medium rounded hover:bg-amber-600 transition flex items-center justify-center">
+              <i class="fas fa-chart-pie mr-1"></i> ATS Match
             </button>
           </div>
           
@@ -1361,6 +1367,143 @@
                         </div>
                     `);
         }
+      } catch (err) {
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
+      } finally {
+        if (btn && originalHTML) {
+          btn.innerHTML = originalHTML;
+          btn.classList.remove('btn-loading');
+        }
+      }
+    }
+
+    // --- ATS Match Checker ---
+    async function checkATSMatch(jobId) {
+      // Get job data for display
+      const job = allJobs.find(j => j.id == jobId) || savedJobs.find(j => j.id == jobId);
+      const jobTitle = job?.title || 'Job';
+      const jobCompany = job?.company || 'Company';
+
+      // Auto-save if from Feed
+      const savedId = await ensureJobSaved(jobId);
+      if (!savedId) {
+        showToast('❌ Could not find job', 'error');
+        return;
+      }
+
+      const btn = document.getElementById(`btn-match-${jobId}`) || document.getElementById(`btn-match-k${jobId}`);
+      const originalHTML = btn?.innerHTML;
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+        btn.classList.add('btn-loading');
+      }
+
+      try {
+        const res = await fetch('/api/job/analyze-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: savedId })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showResult('ATS Match', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+          return;
+        }
+
+        // Parse analysis
+        const analysis = data.analysis || {};
+        const matchScore = analysis.match_score || 50;
+        const matchingStrengths = analysis.matching_strengths || ['Good foundation'];
+        const missingSkills = analysis.missing_skills || ['Review requirements'];
+        const experienceMatch = analysis.experience_match || 'Moderate';
+        const recommendation = analysis.recommendation || 'Partial fit';
+
+        // Determine colors
+        const scoreColor = matchScore >= 70 ? '#10b981' : matchScore >= 50 ? '#f59e0b' : '#ef4444';
+        const expColor = experienceMatch === 'Strong' ? 'bg-green-100 text-green-800' :
+          experienceMatch === 'Weak' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800';
+        const recColor = recommendation.includes('Strong') ? 'bg-green-100 text-green-800' :
+          recommendation.includes('Needs') ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800';
+
+        // Build visual report card
+        const reportHTML = `
+          <div class="space-y-6">
+            <!-- Header -->
+            <div class="text-center">
+              <p class="text-sm text-gray-500 mb-1">${escapeHtml(jobTitle)}</p>
+              <p class="text-xs text-gray-400">${escapeHtml(jobCompany)}</p>
+            </div>
+
+            <!-- Match Score Circle -->
+            <div class="flex justify-center py-4">
+              <div class="relative">
+                <div class="w-36 h-36 rounded-full flex items-center justify-center"
+                     style="background: conic-gradient(${scoreColor} ${matchScore}%, #e5e7eb ${matchScore}% 100%);">
+                  <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-inner">
+                    <div class="text-center">
+                      <span class="text-4xl font-bold" style="color: ${scoreColor}">${matchScore}</span>
+                      <span class="text-gray-400 text-lg">%</span>
+                      <p class="text-xs text-gray-500 mt-1">ATS Match</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Badges Row -->
+            <div class="flex justify-center gap-3">
+              <span class="px-3 py-1 rounded-full text-xs font-medium ${expColor}">${experienceMatch} Experience</span>
+              <span class="px-3 py-1 rounded-full text-xs font-medium ${recColor}">${recommendation}</span>
+            </div>
+
+            <!-- Skills Grid -->
+            <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+              <!-- Matching Strengths -->
+              <div>
+                <h4 class="text-sm font-semibold text-green-700 mb-3 flex items-center gap-2">
+                  <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center text-xs">✓</span>
+                  You Have
+                </h4>
+                <ul class="space-y-2">
+                  ${matchingStrengths.map(s => `
+                    <li class="flex items-start gap-2 text-sm text-gray-700">
+                      <span class="text-green-500 mt-0.5">✓</span>
+                      <span>${escapeHtml(s)}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+
+              <!-- Missing Skills -->
+              <div>
+                <h4 class="text-sm font-semibold text-red-700 mb-3 flex items-center gap-2">
+                  <span class="w-5 h-5 bg-red-100 rounded-full flex items-center justify-center text-xs">!</span>
+                  Missing
+                </h4>
+                <ul class="space-y-2">
+                  ${missingSkills.map(s => `
+                    <li class="flex items-start gap-2 text-sm text-gray-700">
+                      <span class="text-red-500 mt-0.5">✗</span>
+                      <span>${escapeHtml(s)}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            </div>
+
+            <!-- Tip -->
+            <div class="bg-blue-50 rounded-lg p-3 text-center">
+              <p class="text-xs text-blue-700">
+                <i class="fas fa-lightbulb mr-1"></i>
+                Tip: Add missing skills to your resume or cover letter to improve your match score.
+              </p>
+            </div>
+          </div>
+        `;
+
+        showResult('📊 ATS Match Report', reportHTML);
+
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       } finally {
