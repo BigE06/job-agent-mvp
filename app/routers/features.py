@@ -522,7 +522,10 @@ async def interview_chat(data: dict = Body(...)):
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    if len(history) >= 10:
+    # Count questions asked
+    question_count = len([m for m in history if m.get('role') in ['interviewer', 'ai', 'assistant']]) + 1
+    
+    if question_count > 10:
         return {"question": None, "message": "Interview Complete. Generating Report..."}
     
     job = get_job_by_id(str(job_id))
@@ -531,24 +534,11 @@ async def interview_chat(data: dict = Body(...)):
     
     job_context = f"{job.get('title', 'Role')} at {job.get('company', 'Company')}"
     
-    # --- BUILD OPENAI MESSAGES ARRAY WITH HISTORY INJECTION ---
+    # --- SIMPLIFIED SYSTEM PROMPT - Let Python handle cleaning ---
     messages = [
         {
             "role": "system",
-            "content": f"""You are a professional job interviewer for the role: {job_context}.
-
-RULES:
-1. Be professional but critical - this is practice, so push the candidate.
-2. Ask follow-up questions based on their last answer.
-3. If they gave a vague answer, probe for specifics (metrics, technologies, outcomes).
-4. Mix behavioral (STAR) and technical questions relevant to the role.
-5. Keep questions concise (1-2 sentences max).
-
-OUTPUT FORMAT:
-- Return ONLY the next interview question.
-- Do NOT say "Thank you", "Good answer", "Great", or any filler.
-- Do NOT acknowledge their answer. Just ask the next question immediately.
-- Start directly with the question. No preamble."""
+            "content": f"You are a strict interviewer for {job_context}. Ask question {question_count}. Output ONLY the question."
         }
     ]
     
@@ -566,13 +556,7 @@ OUTPUT FORMAT:
     if answer:
         messages.append({"role": "user", "content": answer})
     
-    # CRITICAL: Inject instruction at the END of messages
-    messages.append({
-        "role": "system",
-        "content": "CRITICAL: IGNORE pleasantries. DO NOT say 'Thank you' or 'Great answer' or 'Good point'. IMMEDIATELY ask the next interview question. Start with the question directly."
-    })
-    
-    # --- CALL OPENAI DIRECTLY WITH MESSAGES ARRAY ---
+    # --- CALL OPENAI ---
     try:
         if not client:
             return {"question": "What specific technical challenges have you faced in your previous role?"}
@@ -589,36 +573,60 @@ OUTPUT FORMAT:
         logger.error(f"Interview AI Error: {e}")
         return {"question": "Can you describe a time when you had to solve a complex problem under pressure?"}
     
-    # --- BACKUP SANITIZER: Strip any remaining filler text ---
+    # --- BRUTE FORCE TEXT SANITIZER ---
     response_text = next_question
     
-    FILLER_PHRASES = [
-        "Thank you for your answer.",
-        "Thank you for sharing that.",
-        "Thank you for that response.",
-        "That's a great answer.",
-        "That's a good answer.",
-        "That's interesting.",
-        "Let me ask another question.",
+    # Expanded list of bad phrases to remove
+    BAD_PHRASES = [
+        "Thank you for your answer",
+        "Thank you for sharing that",
+        "Thank you for that response",
+        "Thank you for your response",
+        "Thanks for sharing",
+        "Thanks for that",
+        "Great answer",
+        "Good answer", 
+        "That's a great answer",
+        "That's a good answer",
+        "That's interesting",
+        "Interesting response",
+        "I appreciate your response",
+        "I appreciate that",
+        "Let me ask another question",
         "Let me ask you about",
-        "I appreciate your response.",
-        "Thanks for sharing.",
+        "Let's move on",
+        "Moving on",
+        "For the next question",
+        "Here's my next question",
+        "My next question is",
+        "Question:",
     ]
     
-    for filler in FILLER_PHRASES:
-        response_text = response_text.replace(filler, "")
+    # Force remove all bad phrases
+    for phrase in BAD_PHRASES:
+        response_text = response_text.replace(phrase, "")
+        response_text = response_text.replace(phrase.lower(), "")
+        response_text = response_text.replace(phrase + ".", "")
+        response_text = response_text.replace(phrase + ",", "")
+        response_text = response_text.replace(phrase + "!", "")
     
-    # Strip leading "Great", "Good", "Nice", "Excellent" followed by punctuation
-    response_text = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect)[.,!]?\s*', '', response_text, flags=re.IGNORECASE)
+    # Strip leading filler words with regex
+    response_text = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect|Okay|OK|Now|So|Alright|Well)[.,!]?\s*', '', response_text, flags=re.IGNORECASE)
     
-    # Strip leading "Now," or "So," or "Alright,"
-    response_text = re.sub(r'^(Now|So|Alright|Okay|OK)[.,]?\s*', '', response_text, flags=re.IGNORECASE)
-    
+    # Strip leading punctuation
     response_text = response_text.strip()
+    while response_text and response_text[0] in '.,!?;:-':
+        response_text = response_text[1:].strip()
     
     # If response is now empty or too short, return a default question
     if len(response_text) < 10:
-        response_text = "Can you walk me through your approach to handling conflicting priorities?"
+        defaults = [
+            "Can you walk me through your approach to handling conflicting priorities?",
+            "Tell me about a challenging project you led recently.",
+            "How do you stay current with industry trends and technologies?",
+            "Describe a situation where you had to work with a difficult team member.",
+        ]
+        response_text = defaults[question_count % len(defaults)]
     
     return {"question": response_text}
 

@@ -169,65 +169,74 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
-    # --- RELEVANCE SCORING ENGINE ---
-    # Score-based filtering instead of simple blocklist
-    
-    # Penalty keywords (unless query contains them)
-    PENALTY_KEYWORDS = [
-        'nurse', 'nursing', 'rn', 'lpn', 'cna',
-        'driver', 'cdl', 'truck', 'trucker', 
-        'technician', 'representative', 'sales',
-        'cashier', 'retail', 'warehouse', 'picker',
-        'caregiver', 'aide', 'housekeeper',
+    # --- BRUTE FORCE KILL LIST FILTER ---
+    # Expanded list of irrelevant job keywords - instant discard
+    KILL_LIST = [
+        # Healthcare
+        'nurse', 'nursing', 'rn', 'lpn', 'cna', 'therapist', 'caregiver', 
+        'medical assistant', 'phlebotomist', 'pharmacy',
+        # Transportation
+        'driver', 'cdl', 'truck', 'trucker', 'delivery', 'courier',
+        # Sales/Marketing
+        'sales', 'representative', 'rep', 'recruiter', 'marketing',
+        'account executive', 'business development',
+        # Technical trades
+        'technician', 'mechanic', 'electrician', 'plumber', 'hvac',
+        # Service/Retail
+        'cashier', 'retail', 'warehouse', 'picker', 'packer', 'stocker',
+        'housekeeper', 'janitor', 'custodian', 'aide',
+        # Education
+        'tutor', 'teacher', 'instructor',
+        # Food service
+        'cook', 'chef', 'server', 'waiter', 'waitress', 'bartender',
+        # Security
+        'security guard', 'security officer',
     ]
     
     query_lower = query.lower()
     query_words = [w.lower() for w in query.split() if len(w) >= 2]
     
-    def calculate_relevance(job: Dict[str, Any]) -> int:
+    def check_job(job: Dict[str, Any]) -> tuple:
         """
-        Calculate relevance score for a job.
-        Score >= 10: KEEP
-        Score < 10: DROP
+        Check if job should be kept or dropped.
+        Returns (keep: bool, reason: str, score: int)
         """
         title_lower = job.get("title", "").lower()
         score = 0
         
-        # POSITIVE: +15 points for EACH query keyword in title
+        # STEP 1: KILL LIST CHECK - Instant -100 penalty
+        for kill_word in KILL_LIST:
+            if kill_word in title_lower:
+                # Only kill if user didn't explicitly search for this
+                if kill_word not in query_lower:
+                    return (False, f"Penalty Word: '{kill_word}'", -100)
+        
+        # STEP 2: POSITIVE SCORING - +15 per query keyword match
         for word in query_words:
             if word in title_lower:
                 score += 15
         
-        # PENALTY: -50 for irrelevant keywords (unless query contains them)
-        for penalty_word in PENALTY_KEYWORDS:
-            if penalty_word in title_lower:
-                # Only penalize if the user didn't search for this term
-                if penalty_word not in query_lower:
-                    score -= 50
-                    break  # One penalty is enough
-        
-        return score
+        # STEP 3: Threshold check
+        if score >= 10:
+            return (True, "Passed", score)
+        else:
+            return (False, "No title match", score)
     
-    # Apply scoring filter
+    # Apply filter
     original_count = len(jobs)
     kept_jobs = []
-    dropped_jobs = []
     
     for job in jobs:
-        score = calculate_relevance(job)
-        if score >= 10:
+        keep, reason, score = check_job(job)
+        title = job.get("title", "Unknown")
+        
+        if keep:
             kept_jobs.append(job)
         else:
-            dropped_jobs.append((job.get("title", "Unknown"), score))
+            # Log dropped jobs with clear [FILTER] tag
+            logger.info(f"[FILTER] Dropped '{title}' ({reason})")
     
-    # Log dropped jobs for debugging
-    if dropped_jobs:
-        for title, score in dropped_jobs[:5]:  # Log first 5
-            logger.info(f"❌ Dropped '{title}' - Score: {score}")
-        if len(dropped_jobs) > 5:
-            logger.info(f"   ...and {len(dropped_jobs) - 5} more")
-    
-    logger.info(f"✅ Kept {len(kept_jobs)}/{original_count} jobs (Score >= 10) for query '{query}'")
+    logger.info(f"[FILTER] ✅ Kept {len(kept_jobs)}/{original_count} jobs for query '{query}'")
     return kept_jobs
 
 
