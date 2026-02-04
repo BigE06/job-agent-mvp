@@ -1385,13 +1385,6 @@
       const jobCompany = job?.company || 'Company';
       const jobDescription = job?.description || '';
 
-      // Auto-save if from Feed
-      const savedId = await ensureJobSaved(jobId);
-      if (!savedId) {
-        showToast('❌ Could not find job', 'error');
-        return;
-      }
-
       const btn = document.getElementById(`btn-match-${jobId}`) || document.getElementById(`btn-match-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1400,18 +1393,44 @@
       }
 
       try {
-        // Small delay to ensure DB commit (race condition mitigation)
+        // STEP 1: Fetch profile to get resume
+        const profileRes = await fetch('/api/get-profile');
+        const profileData = await profileRes.json();
+        const resumeText = profileData.resume_text || '';
+
+        if (!resumeText || resumeText.length < 50) {
+          if (btn && originalHTML) {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-loading');
+          }
+          showToast('📄 Please upload your resume in the Profile section first!', 'error');
+          return;
+        }
+
+        // STEP 2: Auto-save if from Feed (Ghost Save)
+        const savedId = await ensureJobSaved(jobId);
+        if (!savedId) {
+          if (btn && originalHTML) {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-loading');
+          }
+          showToast('❌ Could not find job', 'error');
+          return;
+        }
+
+        // STEP 3: Small delay to ensure DB commit (race condition mitigation)
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        // Pass job data as fallback in case DB lookup fails
+        // STEP 4: Call analyze with BOTH job data AND resume
         const res = await fetch('/api/job/analyze-match', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             job_id: savedId,
-            job_title: jobTitle,      // Fallback for race condition
-            company: jobCompany,      // Fallback for race condition
-            job_description: jobDescription  // Fallback for race condition
+            resume_text: resumeText,    // ← Pass resume explicitly!
+            job_title: jobTitle,
+            company: jobCompany,
+            job_description: jobDescription
           })
         });
         const data = await res.json();
