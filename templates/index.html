@@ -1384,6 +1384,11 @@
     let interviewQuestionCount = 0;
 
     async function startInterview(jobId) {
+      // Get job data first (before save might not be committed)
+      const job = allJobs.find(j => j.id == jobId) || savedJobs.find(j => j.id == jobId);
+      const jobTitle = job?.title || 'the role';
+      const jobCompany = job?.company || 'the company';
+
       // Auto-save if from Feed
       const savedId = await ensureJobSaved(jobId);
       if (!savedId) {
@@ -1394,16 +1399,25 @@
       const btn = document.getElementById(`btn-interview-${jobId}`) || document.getElementById(`btn-interview-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing...';
         btn.classList.add('btn-loading');
       }
 
       try {
+        // Small delay to ensure DB commit (race condition mitigation)
+        await new Promise(resolve => setTimeout(resolve, 300));
+
         // STEP 1: Generate all 5 questions upfront (DETERMINISTIC)
+        // Pass job data as fallback in case DB lookup fails
         const res = await fetch('/api/interview/generate-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: savedId, resume_text: '' })
+          body: JSON.stringify({
+            job_id: savedId,
+            resume_text: '',
+            job_title: jobTitle,   // Fallback for race condition
+            company: jobCompany    // Fallback for race condition
+          })
         });
         const data = await res.json();
 
@@ -1428,7 +1442,7 @@
         console.log('✅ Generated interview questions:', interviewQuestions);
 
         // STEP 3: Open modal with first question
-        openInterviewModal('Interview Practice', interviewQuestions[0]);
+        openInterviewModal(jobTitle, interviewQuestions[0]);
 
       } catch (err) {
         showToast('❌ ' + err.message, 'error');

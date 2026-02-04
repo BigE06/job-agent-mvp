@@ -525,21 +525,35 @@ async def interview_generate_questions(data: dict = Body(...)):
     job_id = data.get('job_id')
     resume_text = data.get('resume_text', '')
     
+    # Fallback data from request (in case job not in DB yet - race condition)
+    fallback_title = data.get('job_title', 'the role')
+    fallback_company = data.get('company', 'the company')
+    
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    job = get_job_by_id(str(job_id))
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # --- CRASH-PROOF: Handle race condition gracefully ---
+    job = None
+    try:
+        job = get_job_by_id(str(job_id))
+    except Exception as e:
+        logger.warning(f"[INTERVIEW] Error fetching job {job_id}: {e}")
+    
+    # Use job data if found, otherwise use fallback from request
+    if job and isinstance(job, dict):
+        raw_title = job.get('title') or fallback_title
+        company = job.get('company') or fallback_company
+        description = job.get('description', '')[:2000] if job.get('description') else ''
+    else:
+        logger.warning(f"[INTERVIEW] Job {job_id} not found in DB, using fallback data")
+        raw_title = fallback_title
+        company = fallback_company
+        description = ''
     
     # Clean job title for prompt
-    raw_title = job.get('title', 'Role')
     clean_title = re.sub(r'\$[\d,]+.*', '', raw_title)
     clean_title = re.sub(r'\s*[-–—]\s*(?:Remote|Hybrid|Full-?time).*', '', clean_title, flags=re.IGNORECASE)
     clean_title = clean_title.strip()[:50] or 'the role'
-    
-    company = job.get('company', 'the company')
-    description = job.get('description', '')[:2000]
     
     # Build prompt
     system_prompt = """You are a strict interview question generator.
