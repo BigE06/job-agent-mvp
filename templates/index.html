@@ -1195,17 +1195,10 @@
         return savedJobsMap.get(url);
       }
 
-      // IMMEDIATE: Update heart icon to red BEFORE API call (visual feedback)
-      const heartBtn = document.getElementById(`heart-${jobId}`);
-      const heartIcon = heartBtn?.querySelector('i');
-      if (heartIcon) {
-        heartIcon.className = 'fas fa-heart text-xl';
-        heartBtn.classList.remove('text-gray-300', 'hover:text-red-500');
-        heartBtn.classList.add('text-red-500');
-        heartBtn.title = 'Unsave';
-      }
+      // GHOST SAVE: Do NOT change heart icon - job is saved for AI only
+      // User doesn't see it in Kanban unless they explicitly click the heart
 
-      // Auto-save the job
+      // Ghost-save the job (for AI features only)
       try {
         const res = await fetch('/api/save-job', {
           method: 'POST',
@@ -1214,20 +1207,21 @@
             url: url,
             title: job.title || 'Untitled',
             company: job.company || 'Unknown',
-            location: job.location || 'Remote'
+            location: job.location || 'Remote',
+            ghost: true  // Ghost save - not visible in Kanban
           })
         });
         const data = await res.json();
         const newJobId = data.id || jobId;
 
-        // Update savedJobsMap
+        // Update savedJobsMap for internal tracking
         savedJobsMap.set(url, newJobId);
 
-        showToast('❤️ Job auto-saved!');
+        // No toast, no heart change - silent save for AI features
         return newJobId;
 
       } catch (err) {
-        console.log('Auto-save failed:', err);
+        console.log('Ghost save failed:', err);
         return jobId;  // Try with original ID anyway
       }
     }

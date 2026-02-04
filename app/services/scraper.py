@@ -169,31 +169,52 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
-    # --- NUCLEAR Strict Title-Match Filter ---
-    # At least ONE query word MUST appear in the job TITLE (not description)
-    # This aggressively filters out irrelevant results
-    query_words = [w.lower() for w in query.split()]  # Include ALL words
+    # --- HARD FILTER: Blocklist + Strict Title Match ---
+    # Explicit blocklist of irrelevant job keywords
+    BLOCKLIST = [
+        'nurse', 'nursing', 'rn', 'lpn', 'cna',
+        'driver', 'cdl', 'truck', 'trucker', 'delivery',
+        'caregiver', 'caregiving', 'home health', 'aide',
+        'janitor', 'custodian', 'housekeeper',
+        'cashier', 'retail', 'stocker',
+        'cook', 'dishwasher', 'server', 'waiter', 'waitress',
+        'security guard', 'warehouse', 'picker', 'packer',
+    ]
     
-    def title_matches(job: Dict[str, Any]) -> bool:
-        """Check if at least one query word appears in the job TITLE."""
+    query_lower = query.lower()
+    query_words = [w.lower() for w in query.split() if len(w) >= 3]
+    
+    def passes_hard_filter(job: Dict[str, Any]) -> bool:
+        """Check if job passes blocklist AND title match."""
         title_lower = job.get("title", "").lower()
         
-        # Job is relevant ONLY if at least one query word is in the title
+        # STEP 1: Blocklist check - reject if any blocklist word appears
+        for blocked in BLOCKLIST:
+            if blocked in title_lower:
+                logger.debug(f"BLOCKED: '{job.get('title')}' contains '{blocked}'")
+                return False
+        
+        # STEP 2: Title match - at least ONE query word must appear in title
+        if not query_words:
+            return True  # No meaningful query words
+        
         for word in query_words:
-            if len(word) >= 2 and word in title_lower:  # Min 2 chars
+            if word in title_lower:
                 return True
         
+        # If no query word found in title, reject
+        logger.debug(f"NO MATCH: '{job.get('title')}' - query words: {query_words}")
         return False
     
-    # Apply strict filter
+    # Apply filter
     original_count = len(jobs)
-    jobs = [j for j in jobs if title_matches(j)]
+    jobs = [j for j in jobs if passes_hard_filter(j)]
     filtered_count = original_count - len(jobs)
     
     if filtered_count > 0:
-        logger.info(f"🚫 NUCLEAR filter: Removed {filtered_count} jobs (no title match)")
+        logger.info(f"🚫 HARD filter: Removed {filtered_count}/{original_count} jobs (blocklist/no-match)")
     
-    logger.info(f"✅ Returning {len(jobs)} relevant jobs")
+    logger.info(f"✅ Returning {len(jobs)} relevant jobs for query '{query}'")
     return jobs
 
 

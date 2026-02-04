@@ -557,7 +557,40 @@ Generate the next interview question based on the candidate's last response."""
 
     next_question = get_gpt_response(system_prompt, user_prompt, max_tokens=150)
     
-    return {"question": next_question.strip()}
+    # --- HARD SANITIZER: Strip filler text from response ---
+    response = next_question.strip()
+    
+    # Remove common filler phrases
+    FILLER_PHRASES = [
+        "Thank you for your answer.",
+        "Thank you for sharing that.",
+        "Thank you for that response.",
+        "That's a great answer.",
+        "That's a good answer.",
+        "That's interesting.",
+        "Let me ask another question.",
+        "Let me ask you about",
+        "I appreciate your response.",
+        "Thanks for sharing.",
+    ]
+    
+    for filler in FILLER_PHRASES:
+        response = response.replace(filler, "")
+    
+    # Strip leading "Great", "Good", "Nice", "Excellent" followed by punctuation
+    import re
+    response = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect)[.,!]?\s*', '', response, flags=re.IGNORECASE)
+    
+    # Strip leading "Now," or "So," or "Alright,"
+    response = re.sub(r'^(Now|So|Alright|Okay|OK)[.,]?\s*', '', response, flags=re.IGNORECASE)
+    
+    response = response.strip()
+    
+    # If response is now empty or too short, return a default question
+    if len(response) < 10:
+        response = "Can you tell me more about your experience with problem-solving in challenging situations?"
+    
+    return {"question": response}
 
 
 @router.post("/interview/report")
@@ -657,29 +690,35 @@ async def enrich_job(data: dict = Body(...)):
 # =============================================
 @router.post("/save-job")
 async def save_job(job: dict = Body(...)):
-    """Save a job to the Kanban board."""
+    """Save a job to the Kanban board. If ghost=True, saves without showing in Kanban."""
     try:
         job_url = job.get('link') or job.get('absolute_url') or job.get('url') or ''
         job_title = job.get('title', 'Unknown Role')
         job_company = job.get('company', 'Unknown')
         job_location = job.get('location', 'Remote')
+        is_ghost = job.get('ghost', False)  # Ghost save flag
         
-        logger.info(f"[SAVE] Saving job: {job_title} at {job_company}")
+        # Determine status based on ghost flag
+        status = 'Ghost' if is_ghost else 'Saved'
+        
+        logger.info(f"[SAVE] Saving job: {job_title} at {job_company} (ghost={is_ghost})")
         
         conn = get_legacy_db()
         c = conn.cursor()
         c.execute("SELECT id FROM saved_jobs WHERE url = ?", (job_url,))
-        if c.fetchone():
+        existing = c.fetchone()
+        if existing:
             conn.close()
-            return {"message": "Job already saved"}
+            return {"message": "Job already saved", "id": existing[0]}
         
         c.execute(
-            "INSERT INTO saved_jobs (title, company, location, url, is_direct, status) VALUES (?, ?, ?, ?, ?, 'Saved')",
-            (job_title, job_company, job_location, job_url, True)
+            "INSERT INTO saved_jobs (title, company, location, url, is_direct, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (job_title, job_company, job_location, job_url, True, status)
         )
+        new_id = c.lastrowid
         conn.commit()
         conn.close()
-        return {"message": "Job Saved"}
+        return {"message": "Job Saved", "id": new_id}
     except Exception as e:
         logger.error(f"[SAVE] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -687,10 +726,11 @@ async def save_job(job: dict = Body(...)):
 
 @router.get("/saved-jobs")
 async def get_saved_jobs():
-    """Get all saved jobs for the Kanban board."""
+    """Get all saved jobs for the Kanban board. Excludes Ghost saves."""
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs ORDER BY id DESC")
+    # Exclude Ghost status jobs - they're only for AI features
+    c.execute("SELECT * FROM saved_jobs WHERE status != 'Ghost' ORDER BY id DESC")
     rows = c.fetchall()
     conn.close()
     
