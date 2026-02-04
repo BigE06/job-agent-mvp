@@ -169,35 +169,31 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
-    # --- Strict Relevance Filter ---
-    # Discard jobs where query words don't appear in title or description
-    query_words = [w.lower() for w in query.split() if len(w) > 2]  # Skip short words like "AI"
+    # --- NUCLEAR Strict Title-Match Filter ---
+    # At least ONE query word MUST appear in the job TITLE (not description)
+    # This aggressively filters out irrelevant results
+    query_words = [w.lower() for w in query.split()]  # Include ALL words
     
-    def is_relevant(job: Dict[str, Any]) -> bool:
-        """Check if at least one query word appears in title or description."""
+    def title_matches(job: Dict[str, Any]) -> bool:
+        """Check if at least one query word appears in the job TITLE."""
         title_lower = job.get("title", "").lower()
-        desc_lower = job.get("description", "").lower()
-        combined = title_lower + " " + desc_lower
         
-        # Job is relevant if ANY query word is found
+        # Job is relevant ONLY if at least one query word is in the title
         for word in query_words:
-            if word in combined:
+            if len(word) >= 2 and word in title_lower:  # Min 2 chars
                 return True
         
-        # Also check for the full query phrase
-        if query.lower() in combined:
-            return True
-            
         return False
     
-    # Apply filter
+    # Apply strict filter
     original_count = len(jobs)
-    jobs = [j for j in jobs if is_relevant(j)]
+    jobs = [j for j in jobs if title_matches(j)]
     filtered_count = original_count - len(jobs)
     
     if filtered_count > 0:
-        logger.info(f"🔍 Strict filter: Removed {filtered_count} irrelevant jobs")
+        logger.info(f"🚫 NUCLEAR filter: Removed {filtered_count} jobs (no title match)")
     
+    logger.info(f"✅ Returning {len(jobs)} relevant jobs")
     return jobs
 
 

@@ -540,7 +540,13 @@ RULES:
 3. If they gave a vague answer, probe for specifics (metrics, technologies, outcomes).
 4. Mix behavioral (STAR) and technical questions relevant to the role.
 5. Keep questions concise (1-2 sentences max).
-6. Return ONLY the next question, nothing else."""
+
+CRITICAL OUTPUT RULES:
+- Return ONLY the next interview question, nothing else.
+- Do NOT say "Thank you", "Good answer", "Great", or any filler.
+- Do NOT acknowledge their answer. Just ask the next question immediately.
+- Do NOT say "Let me ask another question" - just ask it directly.
+- Start directly with the question. No preamble."""
 
     user_prompt = f"""JOB: {job_context}
 
