@@ -1379,10 +1379,11 @@
 
     // --- ATS Match Checker ---
     async function checkATSMatch(jobId) {
-      // Get job data for display
+      // Get job data FIRST (before save might not be committed)
       const job = allJobs.find(j => j.id == jobId) || savedJobs.find(j => j.id == jobId);
       const jobTitle = job?.title || 'Job';
       const jobCompany = job?.company || 'Company';
+      const jobDescription = job?.description || '';
 
       // Auto-save if from Feed
       const savedId = await ensureJobSaved(jobId);
@@ -1399,10 +1400,19 @@
       }
 
       try {
+        // Small delay to ensure DB commit (race condition mitigation)
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Pass job data as fallback in case DB lookup fails
         const res = await fetch('/api/job/analyze-match', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: savedId })
+          body: JSON.stringify({
+            job_id: savedId,
+            job_title: jobTitle,      // Fallback for race condition
+            company: jobCompany,      // Fallback for race condition
+            job_description: jobDescription  // Fallback for race condition
+          })
         });
         const data = await res.json();
 

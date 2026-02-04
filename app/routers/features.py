@@ -640,16 +640,31 @@ async def analyze_job_match(data: dict = Body(...)):
     job_id = data.get('job_id')
     resume_text = data.get('resume_text', '')
     
+    # Fallback data from request (race condition handling)
+    fallback_title = data.get('job_title', 'the role')
+    fallback_company = data.get('company', 'the company')
+    fallback_description = data.get('job_description', '')
+    
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    job = get_job_by_id(str(job_id))
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # --- CRASH-PROOF: Handle race condition gracefully ---
+    job = None
+    try:
+        job = get_job_by_id(str(job_id))
+    except Exception as e:
+        logger.warning(f"[ATS] Error fetching job {job_id}: {e}")
     
-    job_title = job.get('title', 'Role')
-    company = job.get('company', 'Company')
-    job_description = job.get('description', '')[:3000]
+    # Use job data if found, otherwise use fallback from request
+    if job and isinstance(job, dict):
+        job_title = job.get('title') or fallback_title
+        company = job.get('company') or fallback_company
+        job_description = (job.get('description') or fallback_description)[:3000]
+    else:
+        logger.warning(f"[ATS] Job {job_id} not found in DB, using fallback data")
+        job_title = fallback_title
+        company = fallback_company
+        job_description = fallback_description[:3000] if fallback_description else ''
     
     # If no resume provided, try to get from profile
     if not resume_text:
