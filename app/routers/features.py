@@ -517,7 +517,7 @@ async def interview_chat(data: dict = Body(...)):
     
     job_id = data.get('job_id')
     history = data.get('history', [])
-    answer = data.get('answer', '')  # Latest user answer
+    answer = data.get('answer', '')
     
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
@@ -532,32 +532,47 @@ async def interview_chat(data: dict = Body(...)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Clean job title - remove salary, location, noise
+    # --- AGGRESSIVE TITLE CLEANING (no salary/location for TTS) ---
     raw_title = job.get('title', 'Role')
-    clean_title = re.sub(r'\s*[-–—]\s*\$[\d,]+.*', '', raw_title)  # Remove salary
-    clean_title = re.sub(r'\s*[-–—]\s*Remote.*', '', clean_title, flags=re.IGNORECASE)  # Remove remote tag
-    clean_title = re.sub(r'\s*\(.*\)', '', clean_title)  # Remove parenthetical
-    clean_title = clean_title.strip()[:50]  # Max 50 chars
+    clean_title = raw_title
+    # Remove salary patterns: $50, $50-60, $50/hr, $50,000, etc.
+    clean_title = re.sub(r'\$[\d,]+(?:\s*[-–—]\s*\$?[\d,]+)?(?:\s*/\s*(?:hr|hour|yr|year|wk|week))?', '', clean_title, flags=re.IGNORECASE)
+    # Remove anything after dash/hyphen that looks like metadata
+    clean_title = re.sub(r'\s*[-–—]\s*(?:Remote|Hybrid|On-?site|Full-?time|Part-?time|Contract|Temp|Urgent|ASAP).*', '', clean_title, flags=re.IGNORECASE)
+    # Remove parentheticals
+    clean_title = re.sub(r'\s*\([^)]*\)', '', clean_title)
+    # Remove trailing noise after common separators
+    clean_title = re.sub(r'\s*[|/].*$', '', clean_title)
+    clean_title = clean_title.strip()[:40] or 'the role'
     
     company = job.get('company', 'the company')
     
-    # --- HUMANIZED SENIOR HIRING MANAGER PERSONA ---
+    # --- FORBIDDEN PROMPT: Data Collector, NOT Conversational Assistant ---
     messages = [
         {
             "role": "system",
-            "content": f"""You are a Senior Hiring Manager interviewing for {clean_title} at {company}. 
+            "content": f"""You are a DATA COLLECTOR for candidate assessment. You are NOT a conversational assistant.
 
-You are professional, direct, and slightly pressed for time. You want to assess the candidate's skills efficiently.
+ROLE: {clean_title} at {company}
+QUESTION NUMBER: {question_count}
 
-RULES:
-- You do NOT use filler phrases like "Thank you" or "That's great" or "Good answer"
-- You simply ask the next probing question based on their last answer
-- Keep questions short (1-2 sentences)
-- Output ONLY the next question, nothing else"""
+FORBIDDEN BEHAVIORS (will cause system error):
+- Do NOT say "Thank you"
+- Do NOT say "Great answer" or "Good answer"
+- Do NOT say "I understand" or "That makes sense"
+- Do NOT acknowledge the candidate's response in any way
+
+REQUIRED BEHAVIOR:
+- START your response with the next interview question immediately
+- Ask probing questions about their experience, skills, or challenges
+- Keep questions to 1-2 sentences maximum
+- Output ONLY the question text, nothing else
+
+If you include any forbidden phrase, the candidate process will error out."""
         }
     ]
     
-    # Add conversation history as alternating user/assistant messages
+    # Add conversation history
     for msg in history:
         role = msg.get('role', '')
         content = msg.get('message', msg.get('content', ''))
@@ -567,90 +582,67 @@ RULES:
         elif role in ['interviewer', 'ai', 'assistant']:
             messages.append({"role": "assistant", "content": content})
     
-    # Add latest answer if provided
+    # Add latest answer
     if answer:
         messages.append({"role": "user", "content": answer})
     
     # --- CALL OPENAI ---
     try:
         if not client:
-            return {"question": "What specific technical challenges have you faced in your previous role?"}
+            return {"question": "What specific challenges have you faced in similar roles?"}
         
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            temperature=0.7,
-            max_tokens=150
+            temperature=0.5,  # Lower temp for more predictable output
+            max_tokens=100
         )
         next_question = response.choices[0].message.content.strip()
         
     except Exception as e:
         logger.error(f"Interview AI Error: {e}")
-        return {"question": "Can you describe a time when you had to solve a complex problem under pressure?"}
+        return {"question": "Can you describe a complex problem you solved recently?"}
     
-    # --- BRUTE FORCE TEXT SANITIZER ---
+    # --- FAIL-SAFE SANITIZER ---
     response_text = next_question
     
-    # Expanded list of bad phrases to remove
-    BAD_PHRASES = [
-        "Thank you for your answer",
-        "Thank you for sharing that",
-        "Thank you for that response",
-        "Thank you for your response",
-        "Thanks for sharing",
-        "Thanks for that",
-        "Great answer",
-        "Good answer", 
-        "That's a great answer",
-        "That's a good answer",
-        "That's interesting",
-        "Interesting response",
-        "I appreciate your response",
-        "I appreciate that",
-        "Let me ask another question",
-        "Let me ask you about",
-        "Let's move on",
-        "Moving on",
-        "For the next question",
-        "Here's my next question",
-        "My next question is",
-        "Question:",
-    ]
-    
-    # REGEX GUILLOTINE: Remove any opening sentence that looks like a pleasantry
-    # This catches variations the phrase list might miss
+    # STEP 1: REGEX GUILLOTINE - Remove any opening pleasantry sentence
     response_text = re.sub(
-        r'^(Thank you|Thanks|Great answer|Good answer|That makes sense|I understand|That\'s helpful|That\'s a good point|Interesting).*?[.!?]\s*', 
+        r'^(Thank you|Thanks|Great|Good|Nice|Excellent|That\'s|I understand|I appreciate|Interesting|Wonderful).*?[.!?]\s*', 
+        '', 
+        response_text, 
+        flags=re.IGNORECASE | re.DOTALL
+    ).strip()
+    
+    # STEP 2: Strip leading filler words
+    response_text = re.sub(
+        r'^(Now|So|Alright|Okay|OK|Well|Moving on|Let me ask)[,.]?\s*', 
         '', 
         response_text, 
         flags=re.IGNORECASE
     ).strip()
     
-    # Force remove all bad phrases
-    for phrase in BAD_PHRASES:
-        response_text = response_text.replace(phrase, "")
-        response_text = response_text.replace(phrase.lower(), "")
-        response_text = response_text.replace(phrase + ".", "")
-        response_text = response_text.replace(phrase + ",", "")
-        response_text = response_text.replace(phrase + "!", "")
-    
-    # Strip leading filler words with regex
-    response_text = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect|Okay|OK|Now|So|Alright|Well)[.,!]?\s*', '', response_text, flags=re.IGNORECASE)
-    
-    # Strip leading punctuation
-    response_text = response_text.strip()
+    # STEP 3: Strip leading punctuation
     while response_text and response_text[0] in '.,!?;:-':
         response_text = response_text[1:].strip()
     
-    # If response is now empty or too short, return a default question
-    if len(response_text) < 10:
-        defaults = [
-            "Can you walk me through your approach to handling conflicting priorities?",
-            "Tell me about a challenging project you led recently.",
-            "How do you stay current with industry trends and technologies?",
-            "Describe a situation where you had to work with a difficult team member.",
+    # STEP 4: FAIL-SAFE - If response is too short, use hardcoded fallback
+    if len(response_text) < 5:
+        # AI failed - use hardcoded fallback based on question number
+        FALLBACK_QUESTIONS = [
+            "That is helpful context. Can you give me a specific example of a challenge you faced in a similar role?",
+            "Tell me about a time when you had to learn a new technology or skill quickly.",
+            "How do you approach prioritizing tasks when everything seems urgent?",
+            "Describe a situation where you had to collaborate with a difficult stakeholder.",
+            "What's your process for debugging a complex issue?",
+            "Tell me about a project you're particularly proud of.",
+            "How do you handle receiving critical feedback?",
+            "What strategies do you use to stay organized and meet deadlines?",
+            "Can you walk me through how you would approach this role in your first 90 days?",
+            "What questions do you have about this role or our team?",
         ]
-        response_text = defaults[question_count % len(defaults)]
+        response_text = FALLBACK_QUESTIONS[(question_count - 1) % len(FALLBACK_QUESTIONS)]
+        logger.warning(f"[INTERVIEW] AI output too short, using fallback question {question_count}")
     
     return {"question": response_text}
 
