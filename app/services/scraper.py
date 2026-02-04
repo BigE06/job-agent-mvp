@@ -169,17 +169,18 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
-    # --- BRUTE FORCE KILL LIST FILTER ---
-    # Expanded list of irrelevant job keywords - instant discard
-    KILL_LIST = [
+    # --- STRICT REGEX WORD-BOUNDARY FILTER ---
+    import re
+    
+    # Banned words - must match as complete words (word boundaries)
+    BANNED_WORDS = [
         # Healthcare
-        'nurse', 'nursing', 'rn', 'lpn', 'cna', 'therapist', 'caregiver', 
-        'medical assistant', 'phlebotomist', 'pharmacy',
-        # Transportation
+        'nurse', 'nursing', 'rn', 'lpn', 'cna', 'therapist', 'caregiver',
+        'phlebotomist', 'pharmacy', 'pharmacist', 'medical',
+        # Transportation  
         'driver', 'cdl', 'truck', 'trucker', 'delivery', 'courier',
         # Sales/Marketing
-        'sales', 'representative', 'rep', 'recruiter', 'marketing',
-        'account executive', 'business development',
+        'sales', 'representative', 'recruiter', 'marketing',
         # Technical trades
         'technician', 'mechanic', 'electrician', 'plumber', 'hvac',
         # Service/Retail
@@ -190,52 +191,56 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
         # Food service
         'cook', 'chef', 'server', 'waiter', 'waitress', 'bartender',
         # Security
-        'security guard', 'security officer',
+        'security',
     ]
+    
+    # Build regex pattern with word boundaries
+    BANNED_PATTERN = r'\b(' + '|'.join(BANNED_WORDS) + r')\b'
     
     query_lower = query.lower()
     query_words = [w.lower() for w in query.split() if len(w) >= 2]
     
-    def check_job(job: Dict[str, Any]) -> tuple:
-        """
-        Check if job should be kept or dropped.
-        Returns (keep: bool, reason: str, score: int)
-        """
-        title_lower = job.get("title", "").lower()
-        score = 0
-        
-        # STEP 1: KILL LIST CHECK - Instant -100 penalty
-        for kill_word in KILL_LIST:
-            if kill_word in title_lower:
-                # Only kill if user didn't explicitly search for this
-                if kill_word not in query_lower:
-                    return (False, f"Penalty Word: '{kill_word}'", -100)
-        
-        # STEP 2: POSITIVE SCORING - +15 per query keyword match
-        for word in query_words:
-            if word in title_lower:
-                score += 15
-        
-        # STEP 3: Threshold check
-        if score >= 10:
-            return (True, "Passed", score)
-        else:
-            return (False, "No title match", score)
+    # Build query pattern to check if user searched for banned word
+    QUERY_PATTERN = r'\b(' + '|'.join(query_words) + r')\b' if query_words else None
     
-    # Apply filter
+    def check_job_regex(job: Dict[str, Any]) -> tuple:
+        """Check if job passes regex filter. Returns (keep, reason)."""
+        title = job.get("title", "")
+        title_lower = title.lower()
+        
+        # STEP 1: Check for banned words using REGEX word boundaries
+        banned_match = re.search(BANNED_PATTERN, title_lower, re.IGNORECASE)
+        
+        if banned_match:
+            matched_word = banned_match.group(1)
+            # Only ban if user didn't search for this word
+            if not re.search(r'\b' + re.escape(matched_word) + r'\b', query_lower, re.IGNORECASE):
+                return (False, f"Banned: '{matched_word}'")
+        
+        # STEP 2: Check if at least one query word is in title
+        if query_words:
+            query_match = re.search(QUERY_PATTERN, title_lower, re.IGNORECASE) if QUERY_PATTERN else None
+            if not query_match:
+                return (False, "No query match")
+        
+        return (True, "Passed")
+    
+    # Apply filter using list comprehension (avoids iteration bugs)
     original_count = len(jobs)
     kept_jobs = []
     
     for job in jobs:
-        keep, reason, score = check_job(job)
         title = job.get("title", "Unknown")
+        keep, reason = check_job_regex(job)
+        
+        # Debug print for every job
+        result = "KEEP" if keep else "DISCARD"
+        print(f"[FILTER] Checking '{title}'... Result: {result} ({reason})")
         
         if keep:
             kept_jobs.append(job)
-        else:
-            # Log dropped jobs with clear [FILTER] tag
-            logger.info(f"[FILTER] Dropped '{title}' ({reason})")
     
+    print(f"[FILTER] ✅ Kept {len(kept_jobs)}/{original_count} jobs for query '{query}'")
     logger.info(f"[FILTER] ✅ Kept {len(kept_jobs)}/{original_count} jobs for query '{query}'")
     return kept_jobs
 

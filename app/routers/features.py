@@ -532,13 +532,28 @@ async def interview_chat(data: dict = Body(...)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    job_context = f"{job.get('title', 'Role')} at {job.get('company', 'Company')}"
+    # Clean job title - remove salary, location, noise
+    raw_title = job.get('title', 'Role')
+    clean_title = re.sub(r'\s*[-–—]\s*\$[\d,]+.*', '', raw_title)  # Remove salary
+    clean_title = re.sub(r'\s*[-–—]\s*Remote.*', '', clean_title, flags=re.IGNORECASE)  # Remove remote tag
+    clean_title = re.sub(r'\s*\(.*\)', '', clean_title)  # Remove parenthetical
+    clean_title = clean_title.strip()[:50]  # Max 50 chars
     
-    # --- SIMPLIFIED SYSTEM PROMPT - Let Python handle cleaning ---
+    company = job.get('company', 'the company')
+    
+    # --- HUMANIZED SENIOR HIRING MANAGER PERSONA ---
     messages = [
         {
             "role": "system",
-            "content": f"You are a strict interviewer for {job_context}. Ask question {question_count}. Output ONLY the question."
+            "content": f"""You are a Senior Hiring Manager interviewing for {clean_title} at {company}. 
+
+You are professional, direct, and slightly pressed for time. You want to assess the candidate's skills efficiently.
+
+RULES:
+- You do NOT use filler phrases like "Thank you" or "That's great" or "Good answer"
+- You simply ask the next probing question based on their last answer
+- Keep questions short (1-2 sentences)
+- Output ONLY the next question, nothing else"""
         }
     ]
     
