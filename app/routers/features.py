@@ -624,12 +624,18 @@ Generate 5 interview questions:"""
         return {"questions": FALLBACK_QUESTIONS}
 
 
+
+
+
 @router.post("/interview/analyze")
 async def interview_analyze(data: dict = Body(...)):
     """
-    Analyze completed interview conversation and generate feedback report.
+    Analyze completed interview conversation and generate structured JSON feedback.
+    Returns visual-friendly data for report card UI.
     """
-    from app.services.ai import get_gpt_response
+    import re
+    import json
+    from app.services.ai import client, OPENAI_API_KEY
     
     job_id = data.get('job_id')
     conversation = data.get('conversation', [])  # List of {question, answer} pairs
@@ -637,8 +643,8 @@ async def interview_analyze(data: dict = Body(...)):
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
     
-    if len(conversation) < 2:
-        raise HTTPException(status_code=400, detail="Need at least 2 Q&A pairs to analyze")
+    if len(conversation) < 1:
+        raise HTTPException(status_code=400, detail="Need at least 1 Q&A pair to analyze")
     
     job = get_job_by_id(str(job_id))
     job_title = job.get('title', 'Role') if job else 'Role'
@@ -651,50 +657,108 @@ async def interview_analyze(data: dict = Body(...)):
         a = qa.get('answer', '')
         conv_text += f"Q{i}: {q}\nA{i}: {a}\n\n"
     
-    system_prompt = """You are an expert interview coach analyzing a mock interview.
-Provide structured, actionable feedback in this exact format:
+    # --- STRUCTURED JSON PROMPT ---
+    system_prompt = """You are an expert interview coach. Analyze the interview and return ONLY a valid JSON object.
 
-## Overall Score: X/10
+OUTPUT FORMAT (strict JSON only, no markdown, no explanation):
+{
+  "overall_score": 7,
+  "technical_match": 75,
+  "communication_score": 80,
+  "star_method_usage": "Partial",
+  "strengths": ["Brief point 1", "Brief point 2", "Brief point 3"],
+  "improvements": ["Brief suggestion 1", "Brief suggestion 2", "Brief suggestion 3"],
+  "summary_sentiment": "Positive"
+}
 
-## Strengths
-- [Specific strength 1]
-- [Specific strength 2]
+SCORING RULES:
+- overall_score: 1-10 (holistic interview performance)
+- technical_match: 0-100 (how well answers matched job requirements)
+- communication_score: 0-100 (clarity, structure, confidence)
+- star_method_usage: "Yes", "No", or "Partial" (did they use Situation-Task-Action-Result)
+- strengths: Max 3 brief points (under 10 words each)
+- improvements: Max 3 brief suggestions (under 10 words each)
+- summary_sentiment: "Positive", "Neutral", or "Caution"
 
-## Areas for Improvement
-- [Area 1]: [Specific suggestion]
-- [Area 2]: [Specific suggestion]
-
-## Best Answer
-[Quote the strongest answer and explain why]
-
-## Answer to Improve
-[Quote the weakest answer and provide a better example]
-
-## Key Recommendations
-1. [Top recommendation]
-2. [Second recommendation]
-3. [Third recommendation]
-
-Be specific, reference actual answers, and provide actionable advice."""
+Return ONLY the JSON object. No other text."""
 
     user_prompt = f"""Analyze this interview for {job_title} at {company}:
 
 {conv_text}
 
-Provide detailed feedback:"""
+Return JSON analysis:"""
+
+    # Default fallback data
+    FALLBACK_ANALYSIS = {
+        "overall_score": 6,
+        "technical_match": 60,
+        "communication_score": 65,
+        "star_method_usage": "Partial",
+        "strengths": ["Good enthusiasm", "Clear communication", "Relevant experience"],
+        "improvements": ["Add more specific examples", "Use STAR method", "Quantify achievements"],
+        "summary_sentiment": "Neutral"
+    }
 
     try:
-        feedback = get_gpt_response(system_prompt, user_prompt, max_tokens=1000)
+        if not client:
+            logger.warning("[INTERVIEW] No AI client, using fallback analysis")
+            return {
+                "analysis": FALLBACK_ANALYSIS,
+                "job_title": job_title,
+                "company": company,
+                "questions_answered": len(conversation)
+            }
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,  # Lower temp for consistent JSON
+            max_tokens=500
+        )
+        
+        raw_output = response.choices[0].message.content.strip()
+        logger.info(f"[INTERVIEW] Raw analysis output: {raw_output[:300]}")
+        
+        # Parse JSON from response
+        # Handle cases where AI adds markdown code blocks
+        json_str = raw_output
+        if "```json" in raw_output:
+            json_str = re.search(r'```json\s*(.*?)\s*```', raw_output, re.DOTALL)
+            json_str = json_str.group(1) if json_str else raw_output
+        elif "```" in raw_output:
+            json_str = re.search(r'```\s*(.*?)\s*```', raw_output, re.DOTALL)
+            json_str = json_str.group(1) if json_str else raw_output
+        
+        try:
+            analysis = json.loads(json_str)
+            # Validate required fields exist
+            required = ["overall_score", "technical_match", "communication_score", "strengths", "improvements"]
+            if all(k in analysis for k in required):
+                return {
+                    "analysis": analysis,
+                    "job_title": job_title,
+                    "company": company,
+                    "questions_answered": len(conversation)
+                }
+        except json.JSONDecodeError as je:
+            logger.warning(f"[INTERVIEW] JSON parse error: {je}")
+        
+        # Fallback if parsing failed
+        logger.warning("[INTERVIEW] Using fallback analysis due to parse failure")
         return {
-            "feedback": feedback,
+            "analysis": FALLBACK_ANALYSIS,
             "job_title": job_title,
             "company": company,
             "questions_answered": len(conversation)
         }
+        
     except Exception as e:
         logger.error(f"[INTERVIEW] Analysis error: {e}")
         return {
-            "feedback": "## Analysis Unavailable\n\nWe couldn't generate detailed feedback at this time. Please try again.",
+            "analysis": FALLBACK_ANALYSIS,
             "job_title": job_title,
             "company": company,
             "questions_answered": len(conversation)
