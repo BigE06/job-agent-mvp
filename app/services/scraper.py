@@ -169,6 +169,35 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
+    # --- Strict Relevance Filter ---
+    # Discard jobs where query words don't appear in title or description
+    query_words = [w.lower() for w in query.split() if len(w) > 2]  # Skip short words like "AI"
+    
+    def is_relevant(job: Dict[str, Any]) -> bool:
+        """Check if at least one query word appears in title or description."""
+        title_lower = job.get("title", "").lower()
+        desc_lower = job.get("description", "").lower()
+        combined = title_lower + " " + desc_lower
+        
+        # Job is relevant if ANY query word is found
+        for word in query_words:
+            if word in combined:
+                return True
+        
+        # Also check for the full query phrase
+        if query.lower() in combined:
+            return True
+            
+        return False
+    
+    # Apply filter
+    original_count = len(jobs)
+    jobs = [j for j in jobs if is_relevant(j)]
+    filtered_count = original_count - len(jobs)
+    
+    if filtered_count > 0:
+        logger.info(f"🔍 Strict filter: Removed {filtered_count} irrelevant jobs")
+    
     return jobs
 
 

@@ -99,6 +99,80 @@
       transition: all 0.15s ease;
     }
 
+    /* Futuristic Interview UI Animations */
+    @keyframes orb-glow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.2), 0 0 60px rgba(139, 92, 246, 0.1);
+        transform: scale(1);
+      }
+
+      50% {
+        box-shadow: 0 0 40px rgba(139, 92, 246, 0.5), 0 0 80px rgba(139, 92, 246, 0.3), 0 0 120px rgba(139, 92, 246, 0.2);
+        transform: scale(1.05);
+      }
+    }
+
+    .orb-speaking {
+      animation: orb-glow 1.5s ease-in-out infinite;
+    }
+
+    @keyframes sound-wave {
+
+      0%,
+      100% {
+        height: 8px;
+      }
+
+      50% {
+        height: 24px;
+      }
+    }
+
+    .wave-bar {
+      width: 4px;
+      background: linear-gradient(to top, #8b5cf6, #c4b5fd);
+      border-radius: 2px;
+      animation: sound-wave 0.8s ease-in-out infinite;
+    }
+
+    .wave-bar:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    .wave-bar:nth-child(2) {
+      animation-delay: 0.1s;
+    }
+
+    .wave-bar:nth-child(3) {
+      animation-delay: 0.2s;
+    }
+
+    .wave-bar:nth-child(4) {
+      animation-delay: 0.3s;
+    }
+
+    .wave-bar:nth-child(5) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .fade-in {
+      animation: fade-in 0.5s ease-out forwards;
+    }
+
     .move-btn:hover:not(:disabled) {
       background-color: #e5e7eb;
     }
@@ -363,46 +437,96 @@
   </div>
 
   <!-- ======================== -->
-  <!-- INTERVIEW CHAT MODAL -->
+  <!-- FUTURISTIC VOICE INTERVIEW MODAL -->
   <!-- ======================== -->
   <div id="interview-modal" class="fixed inset-0 z-50 hidden">
-    <div class="modal-backdrop absolute inset-0 bg-black/40" onclick="closeInterviewModal()"></div>
-    <div
-      class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-      <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b bg-purple-600 text-white shrink-0">
+    <div class="absolute inset-0 bg-white"></div>
+    <div class="absolute inset-0 flex flex-col">
+
+      <!-- Header Bar -->
+      <div class="flex items-center justify-between px-6 py-4 border-b bg-white shrink-0">
         <div>
-          <h2 class="text-lg font-bold flex items-center">
-            <i class="fas fa-microphone mr-2"></i> Interview Practice
-          </h2>
-          <p id="interview-job-title" class="text-purple-200 text-sm"></p>
+          <span class="text-xs text-purple-600 font-semibold tracking-wider uppercase">AI Interview</span>
+          <h2 id="interview-job-title" class="text-lg font-bold text-gray-900"></h2>
         </div>
-        <button onclick="closeInterviewModal()" class="text-white/80 hover:text-white p-2">
-          <i class="fas fa-times text-xl"></i>
-        </button>
-      </div>
-
-      <!-- Chat History -->
-      <div id="interview-chat" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-        <!-- Messages will appear here -->
-      </div>
-
-      <!-- Input Area -->
-      <div class="p-4 border-t bg-white shrink-0">
-        <div class="flex gap-2">
-          <textarea id="interview-input" rows="2"
-            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
-            placeholder="Type your answer..."></textarea>
-          <button onclick="sendInterviewAnswer()" id="interview-send-btn"
-            class="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition flex items-center">
-            <i class="fas fa-paper-plane mr-2"></i> Send
+        <div class="flex items-center gap-4">
+          <span id="interview-counter" class="text-sm text-gray-500">Question 1 of 5</span>
+          <button onclick="closeInterviewModal()" class="text-gray-400 hover:text-gray-600 p-2">
+            <i class="fas fa-times text-xl"></i>
           </button>
         </div>
-        <p class="text-xs text-gray-500 mt-2">
-          <i class="fas fa-lightbulb text-yellow-500 mr-1"></i> Tip: Use the STAR method (Situation, Task, Action,
-          Result)
-        </p>
       </div>
+
+      <!-- Main Content Area -->
+      <div class="flex-1 flex flex-col items-center justify-center p-8">
+
+        <!-- AI Orb -->
+        <div id="ai-orb" class="w-32 h-32 bg-black rounded-full flex items-center justify-center mb-8 shadow-2xl">
+          <i class="fas fa-brain text-4xl text-purple-400"></i>
+        </div>
+
+        <!-- Question Display -->
+        <div id="interview-question-area" class="text-center max-w-2xl mb-8">
+          <p id="interview-question" class="text-xl text-gray-800 leading-relaxed font-medium fade-in"></p>
+        </div>
+
+        <!-- Sound Wave (shown when listening) -->
+        <div id="sound-wave" class="hidden flex items-center justify-center gap-1 h-8 mb-6">
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+
+        <!-- Status Text -->
+        <p id="interview-status" class="text-sm text-gray-500 mb-8">AI is speaking...</p>
+
+        <!-- Action Buttons -->
+        <div id="interview-actions" class="flex flex-col items-center gap-4">
+
+          <!-- Tap to Answer Button (shown after AI speaks) -->
+          <button id="btn-start-recording" onclick="startRecording()"
+            class="hidden px-8 py-4 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-700 transition flex items-center gap-3 shadow-lg hover:shadow-xl">
+            <i class="fas fa-microphone text-xl"></i>
+            Tap to Answer
+          </button>
+
+          <!-- Stop Recording Button -->
+          <button id="btn-stop-recording" onclick="stopRecording()"
+            class="hidden px-8 py-4 bg-red-500 text-white font-semibold rounded-full hover:bg-red-600 transition flex items-center gap-3 shadow-lg">
+            <i class="fas fa-stop text-xl"></i>
+            Done Speaking
+          </button>
+
+          <!-- Processing Indicator -->
+          <div id="interview-processing" class="hidden flex items-center gap-2 text-purple-600">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Processing your answer...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interview Complete Screen (hidden by default) -->
+      <div id="interview-complete"
+        class="hidden absolute inset-0 bg-white flex flex-col items-center justify-center p-8">
+        <div class="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+          <i class="fas fa-check text-4xl text-green-600"></i>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-900 mb-2">Interview Complete!</h3>
+        <p class="text-gray-500 mb-8">Great job practicing your responses.</p>
+        <div class="flex gap-4">
+          <button onclick="generateInterviewAnalysis()"
+            class="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition">
+            <i class="fas fa-chart-line mr-2"></i> Generate Analysis
+          </button>
+          <button onclick="closeInterviewModal()"
+            class="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition">
+            Close
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1070,7 +1194,17 @@
         return savedJobsMap.get(url);
       }
 
-      // Auto-save the job first
+      // IMMEDIATE: Update heart icon to red BEFORE API call (visual feedback)
+      const heartBtn = document.getElementById(`heart-${jobId}`);
+      const heartIcon = heartBtn?.querySelector('i');
+      if (heartIcon) {
+        heartIcon.className = 'fas fa-heart text-xl';
+        heartBtn.classList.remove('text-gray-300', 'hover:text-red-500');
+        heartBtn.classList.add('text-red-500');
+        heartBtn.title = 'Unsave';
+      }
+
+      // Auto-save the job
       try {
         const res = await fetch('/api/save-job', {
           method: 'POST',
@@ -1087,16 +1221,6 @@
 
         // Update savedJobsMap
         savedJobsMap.set(url, newJobId);
-
-        // Update heart icon to red
-        const heartBtn = document.getElementById(`heart-${jobId}`);
-        const heartIcon = heartBtn?.querySelector('i');
-        if (heartIcon) {
-          heartIcon.className = 'fas fa-heart text-xl';
-          heartBtn.classList.remove('text-gray-300', 'hover:text-red-500');
-          heartBtn.classList.add('text-red-500');
-          heartBtn.title = 'Unsave';
-        }
 
         showToast('❤️ Job auto-saved!');
         return newJobId;
@@ -1242,9 +1366,13 @@
       }
     }
 
-    // --- Interview Chat State ---
+    // --- Futuristic Voice Interview State ---
     let currentInterviewJobId = null;
     let interviewHistory = [];
+    let interviewQuestionCount = 0;
+    const MAX_QUESTIONS = 5;
+    let speechRecognition = null;
+    let currentTranscript = '';
 
     async function startInterview(jobId) {
       // Auto-save if from Feed
@@ -1272,9 +1400,9 @@
         if (data.error) {
           showToast('❌ ' + data.error, 'error');
         } else {
-          // Open Interview Chat Modal
           currentInterviewJobId = savedId;
           interviewHistory = [];
+          interviewQuestionCount = 1;
           openInterviewModal(data.job_title || 'Interview Practice', data.question);
         }
       } catch (err) {
@@ -1288,59 +1416,186 @@
     }
 
     function openInterviewModal(jobTitle, firstQuestion) {
+      // Reset UI
       document.getElementById('interview-job-title').textContent = jobTitle;
-      document.getElementById('interview-chat').innerHTML = '';
-      document.getElementById('interview-input').value = '';
+      document.getElementById('interview-counter').textContent = `Question ${interviewQuestionCount} of ${MAX_QUESTIONS}`;
+      document.getElementById('interview-question').textContent = firstQuestion;
+      document.getElementById('interview-status').textContent = 'AI is speaking...';
+      document.getElementById('interview-complete').classList.add('hidden');
 
-      // Add first question from interviewer
-      addChatMessage('interviewer', firstQuestion);
+      // Hide all buttons initially
+      document.getElementById('btn-start-recording').classList.add('hidden');
+      document.getElementById('btn-stop-recording').classList.add('hidden');
+      document.getElementById('interview-processing').classList.add('hidden');
+      document.getElementById('sound-wave').classList.add('hidden');
 
+      // Show modal
       document.getElementById('interview-modal').classList.remove('hidden');
+
+      // Start speaking the question
+      speakQuestion(firstQuestion);
     }
 
     function closeInterviewModal() {
       document.getElementById('interview-modal').classList.add('hidden');
       currentInterviewJobId = null;
       interviewHistory = [];
+      interviewQuestionCount = 0;
+
+      // Stop any ongoing speech
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (speechRecognition) {
+        speechRecognition.abort();
+        speechRecognition = null;
+      }
+
+      // Remove orb animation
+      document.getElementById('ai-orb').classList.remove('orb-speaking');
     }
 
-    function addChatMessage(role, message) {
-      const chatDiv = document.getElementById('interview-chat');
-      const isInterviewer = role === 'interviewer';
+    function speakQuestion(text) {
+      const orb = document.getElementById('ai-orb');
+      const statusEl = document.getElementById('interview-status');
+      const startBtn = document.getElementById('btn-start-recording');
 
-      const msgHtml = `
-        <div class="flex ${isInterviewer ? 'justify-start' : 'justify-end'}">
-          <div class="${isInterviewer ? 'bg-white border border-gray-200' : 'bg-purple-600 text-white'} rounded-lg px-4 py-3 max-w-[85%] shadow-sm">
-            ${isInterviewer ? '<p class="text-xs text-purple-600 font-medium mb-1"><i class="fas fa-user-tie mr-1"></i> Interviewer</p>' : ''}
-            <p class="text-sm leading-relaxed">${escapeHtml(message)}</p>
-          </div>
-        </div>
-      `;
+      // Add speaking animation
+      orb.classList.add('orb-speaking');
+      statusEl.textContent = 'AI is speaking...';
 
-      chatDiv.insertAdjacentHTML('beforeend', msgHtml);
-      chatDiv.scrollTop = chatDiv.scrollHeight;
-
-      interviewHistory.push({ role, message });
-    }
-
-    async function sendInterviewAnswer() {
-      const input = document.getElementById('interview-input');
-      const answer = input.value.trim();
-
-      if (!answer) {
-        input.focus();
+      // Check if speech synthesis is available
+      if (!window.speechSynthesis) {
+        // Fallback: just show the button after a delay
+        setTimeout(() => {
+          orb.classList.remove('orb-speaking');
+          statusEl.textContent = 'Your turn to answer';
+          startBtn.classList.remove('hidden');
+        }, 2000);
         return;
       }
 
-      // Add user message
-      addChatMessage('user', answer);
-      input.value = '';
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
 
-      // Show loading
-      const sendBtn = document.getElementById('interview-send-btn');
-      const originalBtnHTML = sendBtn.innerHTML;
-      sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      sendBtn.disabled = true;
+      utterance.onend = () => {
+        orb.classList.remove('orb-speaking');
+        statusEl.textContent = 'Your turn to answer';
+        startBtn.classList.remove('hidden');
+      };
+
+      utterance.onerror = () => {
+        orb.classList.remove('orb-speaking');
+        statusEl.textContent = 'Your turn to answer';
+        startBtn.classList.remove('hidden');
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function startRecording() {
+      const startBtn = document.getElementById('btn-start-recording');
+      const stopBtn = document.getElementById('btn-stop-recording');
+      const soundWave = document.getElementById('sound-wave');
+      const statusEl = document.getElementById('interview-status');
+
+      // Check for speech recognition support
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        // Fallback to text input modal
+        const answer = prompt('Speech recognition not available. Type your answer:');
+        if (answer && answer.trim()) {
+          currentTranscript = answer.trim();
+          submitAnswer();
+        }
+        return;
+      }
+
+      // Initialize speech recognition
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = false;
+      speechRecognition.lang = 'en-US';
+
+      currentTranscript = '';
+
+      speechRecognition.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            currentTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+      };
+
+      speechRecognition.onerror = (event) => {
+        console.log('Speech recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          statusEl.textContent = 'No speech detected. Try again.';
+        }
+      };
+
+      speechRecognition.onend = () => {
+        // Recognition ended naturally
+      };
+
+      // Start listening
+      try {
+        speechRecognition.start();
+
+        // Update UI
+        startBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        soundWave.classList.remove('hidden');
+        statusEl.textContent = 'Listening... (transcription hidden)';
+
+      } catch (err) {
+        console.log('Speech recognition start error:', err);
+        statusEl.textContent = 'Could not start recording';
+      }
+    }
+
+    function stopRecording() {
+      const stopBtn = document.getElementById('btn-stop-recording');
+      const soundWave = document.getElementById('sound-wave');
+      const processingEl = document.getElementById('interview-processing');
+      const statusEl = document.getElementById('interview-status');
+
+      // Stop recognition
+      if (speechRecognition) {
+        speechRecognition.stop();
+      }
+
+      // Update UI
+      stopBtn.classList.add('hidden');
+      soundWave.classList.add('hidden');
+      processingEl.classList.remove('hidden');
+      statusEl.textContent = '';
+
+      // Short delay to ensure transcript is complete
+      setTimeout(() => {
+        submitAnswer();
+      }, 500);
+    }
+
+    async function submitAnswer() {
+      const processingEl = document.getElementById('interview-processing');
+      const questionEl = document.getElementById('interview-question');
+      const counterEl = document.getElementById('interview-counter');
+      const statusEl = document.getElementById('interview-status');
+
+      const answer = currentTranscript.trim();
+
+      if (!answer) {
+        processingEl.classList.add('hidden');
+        statusEl.textContent = 'No answer detected. Tap to try again.';
+        document.getElementById('btn-start-recording').classList.remove('hidden');
+        return;
+      }
+
+      // Save to history (but don't display - hidden transcript)
+      interviewHistory.push({ role: 'user', message: answer });
 
       try {
         const res = await fetch('/api/interview/chat', {
@@ -1354,19 +1609,74 @@
         });
         const data = await res.json();
 
+        processingEl.classList.add('hidden');
+
         if (data.error) {
-          addChatMessage('interviewer', 'Sorry, I encountered an error. Let\'s try again.');
+          statusEl.textContent = 'Error occurred. Let\'s try again.';
+          document.getElementById('btn-start-recording').classList.remove('hidden');
+          return;
+        }
+
+        // Get next question
+        const nextQuestion = data.feedback || data.next_question || data.response || 'Thank you for your answer. Let me ask another question.';
+        interviewHistory.push({ role: 'interviewer', message: nextQuestion });
+        interviewQuestionCount++;
+
+        // Check if interview complete
+        if (interviewQuestionCount > MAX_QUESTIONS) {
+          showInterviewComplete();
+          return;
+        }
+
+        // Update UI for next question
+        counterEl.textContent = `Question ${interviewQuestionCount} of ${MAX_QUESTIONS}`;
+        questionEl.className = 'text-xl text-gray-800 leading-relaxed font-medium fade-in';
+        questionEl.textContent = nextQuestion;
+
+        // Speak next question
+        speakQuestion(nextQuestion);
+
+      } catch (err) {
+        processingEl.classList.add('hidden');
+        statusEl.textContent = 'Connection error. Tap to retry.';
+        document.getElementById('btn-start-recording').classList.remove('hidden');
+      }
+    }
+
+    function showInterviewComplete() {
+      document.getElementById('interview-complete').classList.remove('hidden');
+    }
+
+    async function generateInterviewAnalysis() {
+      showToast('📊 Generating interview analysis...');
+
+      try {
+        const res = await fetch('/api/interview/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: currentInterviewJobId,
+            history: interviewHistory
+          })
+        });
+        const data = await res.json();
+
+        closeInterviewModal();
+
+        if (data.error) {
+          showResult('Interview Analysis', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
         } else {
-          // Add interviewer response
-          const response = data.feedback || data.next_question || data.response || 'Thank you for your answer.';
-          addChatMessage('interviewer', response);
+          const analysis = data.analysis || data.feedback || 'Great practice session!';
+          currentResultText = analysis;
+          showResult('📊 Interview Analysis', `
+            <div class="bg-gray-50 rounded-lg p-6 whitespace-pre-wrap text-gray-800 leading-relaxed">
+              ${escapeHtml(analysis)}
+            </div>
+          `);
         }
       } catch (err) {
-        addChatMessage('interviewer', 'Connection error. Please try again.');
-      } finally {
-        sendBtn.innerHTML = originalBtnHTML;
-        sendBtn.disabled = false;
-        input.focus();
+        closeInterviewModal();
+        showResult('Error', `<p class="text-red-600">${err.message}</p>`);
       }
     }
 
