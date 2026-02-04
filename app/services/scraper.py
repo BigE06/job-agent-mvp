@@ -169,53 +169,66 @@ def search_adzuna_jobs(query: str, location: str = "", country: str = "us", resu
             "source": "Adzuna",
         })
     
-    # --- HARD FILTER: Blocklist + Strict Title Match ---
-    # Explicit blocklist of irrelevant job keywords
-    BLOCKLIST = [
+    # --- RELEVANCE SCORING ENGINE ---
+    # Score-based filtering instead of simple blocklist
+    
+    # Penalty keywords (unless query contains them)
+    PENALTY_KEYWORDS = [
         'nurse', 'nursing', 'rn', 'lpn', 'cna',
-        'driver', 'cdl', 'truck', 'trucker', 'delivery',
-        'caregiver', 'caregiving', 'home health', 'aide',
-        'janitor', 'custodian', 'housekeeper',
-        'cashier', 'retail', 'stocker',
-        'cook', 'dishwasher', 'server', 'waiter', 'waitress',
-        'security guard', 'warehouse', 'picker', 'packer',
+        'driver', 'cdl', 'truck', 'trucker', 
+        'technician', 'representative', 'sales',
+        'cashier', 'retail', 'warehouse', 'picker',
+        'caregiver', 'aide', 'housekeeper',
     ]
     
     query_lower = query.lower()
-    query_words = [w.lower() for w in query.split() if len(w) >= 3]
+    query_words = [w.lower() for w in query.split() if len(w) >= 2]
     
-    def passes_hard_filter(job: Dict[str, Any]) -> bool:
-        """Check if job passes blocklist AND title match."""
+    def calculate_relevance(job: Dict[str, Any]) -> int:
+        """
+        Calculate relevance score for a job.
+        Score >= 10: KEEP
+        Score < 10: DROP
+        """
         title_lower = job.get("title", "").lower()
+        score = 0
         
-        # STEP 1: Blocklist check - reject if any blocklist word appears
-        for blocked in BLOCKLIST:
-            if blocked in title_lower:
-                logger.debug(f"BLOCKED: '{job.get('title')}' contains '{blocked}'")
-                return False
-        
-        # STEP 2: Title match - at least ONE query word must appear in title
-        if not query_words:
-            return True  # No meaningful query words
-        
+        # POSITIVE: +15 points for EACH query keyword in title
         for word in query_words:
             if word in title_lower:
-                return True
+                score += 15
         
-        # If no query word found in title, reject
-        logger.debug(f"NO MATCH: '{job.get('title')}' - query words: {query_words}")
-        return False
+        # PENALTY: -50 for irrelevant keywords (unless query contains them)
+        for penalty_word in PENALTY_KEYWORDS:
+            if penalty_word in title_lower:
+                # Only penalize if the user didn't search for this term
+                if penalty_word not in query_lower:
+                    score -= 50
+                    break  # One penalty is enough
+        
+        return score
     
-    # Apply filter
+    # Apply scoring filter
     original_count = len(jobs)
-    jobs = [j for j in jobs if passes_hard_filter(j)]
-    filtered_count = original_count - len(jobs)
+    kept_jobs = []
+    dropped_jobs = []
     
-    if filtered_count > 0:
-        logger.info(f"🚫 HARD filter: Removed {filtered_count}/{original_count} jobs (blocklist/no-match)")
+    for job in jobs:
+        score = calculate_relevance(job)
+        if score >= 10:
+            kept_jobs.append(job)
+        else:
+            dropped_jobs.append((job.get("title", "Unknown"), score))
     
-    logger.info(f"✅ Returning {len(jobs)} relevant jobs for query '{query}'")
-    return jobs
+    # Log dropped jobs for debugging
+    if dropped_jobs:
+        for title, score in dropped_jobs[:5]:  # Log first 5
+            logger.info(f"❌ Dropped '{title}' - Score: {score}")
+        if len(dropped_jobs) > 5:
+            logger.info(f"   ...and {len(dropped_jobs) - 5} more")
+    
+    logger.info(f"✅ Kept {len(kept_jobs)}/{original_count} jobs (Score >= 10) for query '{query}'")
+    return kept_jobs
 
 
 def run_scraper(query: str = "AI Engineer", country: str = "us", location: str = "") -> Dict[str, Any]:

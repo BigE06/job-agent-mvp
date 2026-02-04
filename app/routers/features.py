@@ -512,8 +512,12 @@ async def interview_start(data: dict = Body(...)):
 @router.post("/interview/chat")
 async def interview_chat(data: dict = Body(...)):
     """Continue the interview conversation with follow-up questions."""
+    import re
+    from app.services.ai import client, OPENAI_API_KEY
+    
     job_id = data.get('job_id')
     history = data.get('history', [])
+    answer = data.get('answer', '')  # Latest user answer
     
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
@@ -527,12 +531,11 @@ async def interview_chat(data: dict = Body(...)):
     
     job_context = f"{job.get('title', 'Role')} at {job.get('company', 'Company')}"
     
-    formatted_history = ""
-    for msg in history:
-        role = "Interviewer" if msg.get('role') == 'ai' else "Candidate"
-        formatted_history += f"{role}: {msg.get('content', '')}\n"
-    
-    system_prompt = """You are a professional job interviewer conducting a behavioral/technical interview.
+    # --- BUILD OPENAI MESSAGES ARRAY WITH HISTORY INJECTION ---
+    messages = [
+        {
+            "role": "system",
+            "content": f"""You are a professional job interviewer for the role: {job_context}.
 
 RULES:
 1. Be professional but critical - this is practice, so push the candidate.
@@ -541,26 +544,54 @@ RULES:
 4. Mix behavioral (STAR) and technical questions relevant to the role.
 5. Keep questions concise (1-2 sentences max).
 
-CRITICAL OUTPUT RULES:
-- Return ONLY the next interview question, nothing else.
+OUTPUT FORMAT:
+- Return ONLY the next interview question.
 - Do NOT say "Thank you", "Good answer", "Great", or any filler.
 - Do NOT acknowledge their answer. Just ask the next question immediately.
-- Do NOT say "Let me ask another question" - just ask it directly.
 - Start directly with the question. No preamble."""
-
-    user_prompt = f"""JOB: {job_context}
-
-CONVERSATION SO FAR:
-{formatted_history}
-
-Generate the next interview question based on the candidate's last response."""
-
-    next_question = get_gpt_response(system_prompt, user_prompt, max_tokens=150)
+        }
+    ]
     
-    # --- HARD SANITIZER: Strip filler text from response ---
-    response = next_question.strip()
+    # Add conversation history as alternating user/assistant messages
+    for msg in history:
+        role = msg.get('role', '')
+        content = msg.get('message', msg.get('content', ''))
+        
+        if role in ['user', 'candidate']:
+            messages.append({"role": "user", "content": content})
+        elif role in ['interviewer', 'ai', 'assistant']:
+            messages.append({"role": "assistant", "content": content})
     
-    # Remove common filler phrases
+    # Add latest answer if provided
+    if answer:
+        messages.append({"role": "user", "content": answer})
+    
+    # CRITICAL: Inject instruction at the END of messages
+    messages.append({
+        "role": "system",
+        "content": "CRITICAL: IGNORE pleasantries. DO NOT say 'Thank you' or 'Great answer' or 'Good point'. IMMEDIATELY ask the next interview question. Start with the question directly."
+    })
+    
+    # --- CALL OPENAI DIRECTLY WITH MESSAGES ARRAY ---
+    try:
+        if not client:
+            return {"question": "What specific technical challenges have you faced in your previous role?"}
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=150
+        )
+        next_question = response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logger.error(f"Interview AI Error: {e}")
+        return {"question": "Can you describe a time when you had to solve a complex problem under pressure?"}
+    
+    # --- BACKUP SANITIZER: Strip any remaining filler text ---
+    response_text = next_question
+    
     FILLER_PHRASES = [
         "Thank you for your answer.",
         "Thank you for sharing that.",
@@ -575,22 +606,21 @@ Generate the next interview question based on the candidate's last response."""
     ]
     
     for filler in FILLER_PHRASES:
-        response = response.replace(filler, "")
+        response_text = response_text.replace(filler, "")
     
     # Strip leading "Great", "Good", "Nice", "Excellent" followed by punctuation
-    import re
-    response = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect)[.,!]?\s*', '', response, flags=re.IGNORECASE)
+    response_text = re.sub(r'^(Great|Good|Nice|Excellent|Wonderful|Perfect)[.,!]?\s*', '', response_text, flags=re.IGNORECASE)
     
     # Strip leading "Now," or "So," or "Alright,"
-    response = re.sub(r'^(Now|So|Alright|Okay|OK)[.,]?\s*', '', response, flags=re.IGNORECASE)
+    response_text = re.sub(r'^(Now|So|Alright|Okay|OK)[.,]?\s*', '', response_text, flags=re.IGNORECASE)
     
-    response = response.strip()
+    response_text = response_text.strip()
     
     # If response is now empty or too short, return a default question
-    if len(response) < 10:
-        response = "Can you tell me more about your experience with problem-solving in challenging situations?"
+    if len(response_text) < 10:
+        response_text = "Can you walk me through your approach to handling conflicting priorities?"
     
-    return {"question": response}
+    return {"question": response_text}
 
 
 @router.post("/interview/report")
