@@ -27,16 +27,34 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- 1. TABLE CREATION LOGIC ---
+from sqlalchemy import text
+
 def create_tables():
     logger.info("🚀 STARTUP: Checking/Creating database tables...")
+    
+    # 🚨 BUNKER BUSTER: Force-wipe all tables including FK dependencies
+    # This is required for Render Free Tier to fix the schema mismatch.
+    # ⚠️ REMOVE THIS BLOCK AFTER SUCCESSFUL DEPLOY!
     try:
-        # --- TEMPORARY FIX START ---
-        # ⚠️ UNCOMMENT THIS LINE FOR ONE DEPLOY ONLY to wipe the cloud DB
-        # Remove this line after successful schema rebuild!
-        Base.metadata.drop_all(bind=engine)
-        logger.info("🗑️ DROPPED all tables (temporary fix)")
-        # --- TEMPORARY FIX END ---
-        
+        with engine.connect() as connection:
+            trans = connection.begin()
+            try:
+                # Force delete in specific order with CASCADE
+                tables = ["applications", "profiles", "job_posts", "users"]
+                for table in tables:
+                    connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
+                    logger.info(f"🗑️ Dropped table: {table}")
+                trans.commit()
+                logger.info("✅ DATABASE RESET: All tables wiped successfully.")
+            except Exception as e:
+                trans.rollback()
+                logger.error(f"❌ DATABASE RESET FAILED: {e}")
+    except Exception as e:
+        logger.error(f"❌ Connection error during reset: {e}")
+    # 🚨 END BUNKER BUSTER - REMOVE AFTER SUCCESSFUL DEPLOY!
+    
+    # Rebuild the tables with the correct schema
+    try:
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Tables created/verified successfully.")
     except Exception as e:
