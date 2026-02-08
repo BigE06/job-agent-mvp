@@ -27,38 +27,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- 1. TABLE CREATION LOGIC ---
-from sqlalchemy import text
-
 def create_tables():
-    logger.info("🚀 STARTUP: Checking/Creating database tables...")
-    
-    # 🚨 BUNKER BUSTER: Force-wipe all tables including FK dependencies
-    # This is required for Render Free Tier to fix the schema mismatch.
-    # ⚠️ REMOVE THIS BLOCK AFTER SUCCESSFUL DEPLOY!
-    try:
-        with engine.connect() as connection:
-            trans = connection.begin()
-            try:
-                # Force delete in specific order with CASCADE
-                tables = ["applications", "profiles", "job_posts", "users"]
-                for table in tables:
-                    connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
-                    logger.info(f"🗑️ Dropped table: {table}")
-                trans.commit()
-                logger.info("✅ DATABASE RESET: All tables wiped successfully.")
-            except Exception as e:
-                trans.rollback()
-                logger.error(f"❌ DATABASE RESET FAILED: {e}")
-    except Exception as e:
-        logger.error(f"❌ Connection error during reset: {e}")
-    # 🚨 END BUNKER BUSTER - REMOVE AFTER SUCCESSFUL DEPLOY!
-    
-    # Rebuild the tables with the correct schema
+    """✅ FINAL STABLE VERSION - Database synced, only verify tables exist."""
+    logger.info("� STARTUP: Checking/Creating database tables...")
     try:
         Base.metadata.create_all(bind=engine)
-        logger.info("✅ Tables created/verified successfully.")
+        logger.info("✅ Database verified and ready.")
     except Exception as e:
-        logger.error(f"❌ Error creating tables: {e}")
+        logger.error(f"❌ Startup Error: {e}")
 
 # --- 2. SEEDING LOGIC ---
 def seed_initial_data():
