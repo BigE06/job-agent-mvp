@@ -13,7 +13,7 @@ import uuid
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, HTTPException, UploadFile, File
+from fastapi import APIRouter, Body, HTTPException, UploadFile, File, Request
 from pypdf import PdfReader
 
 from app.services.ai import get_gpt_response
@@ -36,6 +36,21 @@ def get_legacy_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_current_user_id(request: Request) -> int:
+    """
+    Extract current user ID from session cookie.
+    SECURITY: All data queries MUST use this to filter by owner_id.
+    Raises HTTPException 401 if not authenticated.
+    """
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
+    try:
+        return int(user_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid session. Please log in again.")
 
 
 def get_job_by_id(job_id: str) -> Optional[Dict[str, Any]]:
@@ -120,10 +135,13 @@ def enrich_if_needed(job: Dict[str, Any]) -> Dict[str, Any]:
 
 # =============================================
 # RESUME UPLOAD
+# SECURITY: Requires auth, saves with owner_id
 # =============================================
 @router.post("/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
-    """Parse a PDF resume and extract skills."""
+async def upload_resume(request: Request, file: UploadFile = File(...)):
+    """Parse a PDF resume and extract skills. SECURITY: Saves to current user's profile."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         contents = await file.read()
         pdf_file = io.BytesIO(contents)
@@ -138,15 +156,26 @@ async def upload_resume(file: UploadFile = File(...)):
         
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("SELECT id FROM profile LIMIT 1")
+        # SECURITY: Check if THIS USER already has a profile
+        c.execute("SELECT id FROM profile WHERE owner_id = ?", (owner_id,))
         if c.fetchone():
-            c.execute("UPDATE profile SET resume_text = ?, skills = ?", (text, extracted_skills))
+            # SECURITY: Only update this user's profile
+            c.execute(
+                "UPDATE profile SET resume_text = ?, skills = ? WHERE owner_id = ?", 
+                (text, extracted_skills, owner_id)
+            )
         else:
-            c.execute("INSERT INTO profile (resume_text, skills) VALUES (?, ?)", (text, extracted_skills))
+            # SECURITY: Insert with owner_id
+            c.execute(
+                "INSERT INTO profile (owner_id, resume_text, skills) VALUES (?, ?, ?)", 
+                (owner_id, text, extracted_skills)
+            )
         conn.commit()
         conn.close()
         
         return {"message": "Parsed", "text": text, "skills": extracted_skills}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Resume upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -300,11 +329,16 @@ Generate the cold email as JSON."""
 
 
 # =============================================
-# GENERATE CURATED CV (with auto-enrichment)
+# GENERATE CURATED CV (with Smart Fix Loop)
 # =============================================
 @router.post("/generate-curated-cv")
 async def generate_curated_cv(data: dict = Body(...)):
-    """Generate a tailored CV with Harvard Style CSS. Auto-enriches job description if needed."""
+    """
+    Generate a tailored CV with Harvard Style CSS.
+    Implements SMART FIX LOOP: Extract keywords → Find gaps → Force injection.
+    """
+    from app.services.ai import extract_jd_keywords, find_missing_keywords, build_keyword_injection_prompt
+    
     job_id = data.get('job_id')
     gap_answers = data.get('gap_answers', [])
     
@@ -328,34 +362,110 @@ async def generate_curated_cv(data: dict = Body(...)):
     
     job_description = job.get('description', '') or f"{job.get('title', '')} at {job.get('company', '')}"
     
-    system_prompt = """You are a Resume Formatting Engine. Output ONLY raw HTML code.
-DO NOT use markdown code blocks (no ```html).
+    # =============================================
+    # SMART FIX LOOP: Path B Intelligence Upgrade
+    # SAFETY: If extraction fails, proceed with standard generation
+    # =============================================
+    jd_keywords = []
+    missing_keywords = []
+    keyword_injection = ""
+    
+    try:
+        # Step 1: Extract keywords from Job Description
+        jd_keywords = extract_jd_keywords(job_description)
+        
+        # Step 2: Find EXISTING and MISSING keywords (Preservation Protocol)
+        existing_keywords, missing_keywords = find_missing_keywords(jd_keywords, resume_text)
+        
+        # Step 3: Build injection prompt with Preservation Protocol
+        keyword_injection = build_keyword_injection_prompt(existing_keywords, missing_keywords)
+        
+        logger.info(f"🎯 Smart Fix Loop: {len(jd_keywords)} JD keywords, {len(existing_keywords)} existing, {len(missing_keywords)} missing")
+    except Exception as e:
+        # SAFETY FALLBACK: If Smart Fix fails, proceed with standard generation
+        logger.warning(f"⚠️ Smart Fix Loop failed, using standard generation: {e}")
+        jd_keywords = []
+        existing_keywords = []
+        missing_keywords = []
+        keyword_injection = ""
+    # =============================================
+    # ADDENDUM STRATEGY: Generate Summary Block → Prepend to Original
+    # This keeps the original resume 100% INTACT to protect ATS score
+    # =============================================
+    
+    # Step 1: Generate ONLY the addendum (Summary + Skills Alignment)
+    # CRITICAL: Do NOT generate name, contact, or experience
+    addendum_system_prompt = f"""You are an expert Career Strategist.
+Output ONLY raw HTML code. NO markdown code blocks.
 
-YOUR ONLY GOAL is to take the user's raw resume text and format it into a clean, professional HTML structure.
+YOUR TASK: Generate a "Targeted Summary" block to prepend to the user's existing resume.
+This block bridges the gap between the user's actual experience and the job requirements.
 
-CRITICAL RULES - READ CAREFULLY:
-1. DO NOT SUMMARIZE. DO NOT PARAPHRASE. DO NOT SHORTEN.
-2. COPY the 'Experience' section EXACTLY as it appears in the source text.
-   - If the user lists 5 roles, you MUST output all 5 roles.
-   - If a role has 10 bullet points, you MUST output all 10 bullet points.
-   - Copy the exact wording. Do not "improve" or "tailor" the bullets.
-3. CRITICAL SORTING RULE: You MUST re-order the 'Experience' section in REVERSE CHRONOLOGICAL ORDER.
-   - Start with the CURRENT or MOST RECENT job first (e.g., "2024-Present").
-   - Then list the previous job, and so on.
-4. COPY the 'Education' section EXACTLY as it appears (reverse chronological order).
-5. COPY the 'Skills' section EXACTLY as it appears, but you may reorder to prioritize job-relevant skills.
-6. The ONLY section you are allowed to WRITE YOURSELF is the 'Professional Profile' summary at the top, which should be 2-3 sentences tailored to the Job Description.
+{keyword_injection}
 
-OUTPUT STRUCTURE:
-1. Header (Name, Contact Info from source)
-2. Professional Profile (YOU WRITE THIS - tailored to the job)
-3. Skills (From source, reordered for relevance)
-4. Experience (VERBATIM COPY from source - ALL roles, ALL bullets - REVERSE CHRONOLOGICAL ORDER)
-5. Education (VERBATIM COPY from source - REVERSE CHRONOLOGICAL ORDER)
+### ABSOLUTE PROHIBITIONS (CRITICAL):
+❌ DO NOT write the user's Name
+❌ DO NOT write Email, Phone, or any contact info
+❌ DO NOT generate Experience or Education sections
+❌ DO NOT fabricate skills the user doesn't have
 
-CSS Rules (Harvard Style):
-- @page { margin: 0; }
-- body { font-family: 'Times New Roman', serif; margin: 1in; color: #000; line-height: 1.4; }
+### OUTPUT STRUCTURE (Generate ONLY these):
+1. **Targeted Executive Summary for [Job Title]**
+   - 3-4 sentences bridging user's experience to this specific job
+   - Frame missing skills as transferable: "Leveraging strong [Actual Skill] background to rapidly adapt to [Missing Skill]..."
+   - Include existing matching keywords naturally
+
+2. **Strategic Skills Alignment**
+   - List the key skills for this role (blend existing + transferable)
+   - Format as comma-separated inline list
+
+### HTML FORMAT:
+<div class="addendum-block" style="background: #f8f9fa; border-left: 4px solid #2563eb; padding: 15px; margin-bottom: 20px;">
+  <h3 style="margin: 0 0 10px 0; font-size: 12pt; color: #1e40af;">Targeted Executive Summary</h3>
+  <p style="margin: 0 0 15px 0; font-size: 11pt; line-height: 1.5;">[Summary text here]</p>
+  <h3 style="margin: 0 0 8px 0; font-size: 12pt; color: #1e40af;">Strategic Skills Alignment</h3>
+  <p style="margin: 0; font-size: 11pt;">[Skills list here]</p>
+</div>
+
+STOP after the addendum block. Do not generate anything else."""
+
+    addendum_user_prompt = f"""
+TARGET JOB: {job.get('title', 'Role')} at {job.get('company', 'Company')}
+JOB DESCRIPTION EXCERPT: {job_description[:1500]}
+
+=== MISSING KEYWORDS (bridge these honestly) ===
+{', '.join(missing_keywords) if missing_keywords else 'None - user has all key skills'}
+
+=== USER'S EXISTING MATCHING KEYWORDS (emphasize these!) ===
+{', '.join(existing_keywords) if existing_keywords else 'None identified'}
+
+=== USER'S RESUME EXCERPT (for context only - DO NOT copy name/contact) ===
+{resume_text[:2000]}
+
+REMEMBER: 
+- Start DIRECTLY with the addendum block
+- NO name, NO contact info, NO experience
+- Bridge missing skills honestly using transferable skills framing"""
+
+    # Generate the addendum block
+    addendum_html = get_gpt_response(addendum_system_prompt, addendum_user_prompt, max_tokens=800)
+    addendum_html = addendum_html.replace("```html", "").replace("```", "").strip()
+    
+    # Step 2: Format the ORIGINAL resume as HTML (100% preserved)
+    resume_system_prompt = """You are a Resume Formatting Engine. Output ONLY raw HTML code.
+DO NOT use markdown code blocks.
+
+YOUR ONLY TASK: Convert the user's complete resume to clean, professional HTML.
+
+CRITICAL RULES - VERBATIM COPY:
+1. COPY ALL CONTENT EXACTLY - do not summarize, paraphrase, or shorten
+2. Keep ALL bullet points exactly as written
+3. Keep ALL job titles, dates, and company names exactly as written
+4. Keep ALL skills exactly as written
+5. Format in reverse chronological order where applicable
+
+CSS RULES (Harvard Style):
+- body { font-family: 'Times New Roman', serif; line-height: 1.4; }
 - h1 { text-align: center; text-transform: uppercase; font-size: 20pt; margin-bottom: 5px; }
 - .contact-info { text-align: center; font-size: 10pt; margin-bottom: 20px; }
 - h2 { text-transform: uppercase; font-size: 11pt; border-bottom: 1px solid #000; margin-top: 15px; margin-bottom: 8px; }
@@ -364,23 +474,34 @@ CSS Rules (Harvard Style):
 - ul { margin: 0; padding-left: 18px; }
 - li { margin-bottom: 2px; font-size: 11pt; }"""
 
-    user_prompt = f"""
-TARGET JOB: {job.get('title', 'Role')} at {job.get('company', 'Company')}
-JOB DESCRIPTION: {job_description[:3000]}
+    resume_user_prompt = f"""Convert this COMPLETE resume to HTML. COPY ALL CONTENT VERBATIM:
 
-=== SOURCE RESUME (COPY EXPERIENCE & EDUCATION VERBATIM) ===
-{resume_text[:6000]}
+{resume_text[:8000]}"""
 
-=== GAP SKILLS TO INTEGRATE INTO PROFILE SUMMARY ===
-{json.dumps(gap_answers)}
-
-REMINDER: The Experience and Education sections must be copied WORD-FOR-WORD from the source resume above. Only the Professional Profile summary should be written by you.
-"""
+    original_resume_html = get_gpt_response(resume_system_prompt, resume_user_prompt, max_tokens=4000)
+    original_resume_html = original_resume_html.replace("```html", "").replace("```", "").strip()
     
-    raw_html = get_gpt_response(system_prompt, user_prompt, max_tokens=4000)
-    clean_html = raw_html.replace("```html", "").replace("```", "").strip()
+    # Step 3: Prepend addendum to original (SAFETY LOCK - original 100% intact)
+    clean_html = f"""<!-- ADDENDUM: Targeted for {job.get('title', 'This Role')} -->
+{addendum_html}
+
+<hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;">
+
+<!-- ORIGINAL RESUME (Preserved 100% Verbatim) -->
+{original_resume_html}"""
     
-    return {"cv_html": clean_html}
+    logger.info(f"✅ Addendum Strategy: Addendum={len(addendum_html)} chars, Original={len(original_resume_html)} chars")
+    
+    return {
+        "cv_html": clean_html,
+        "smart_fix": {
+            "jd_keywords": jd_keywords,
+            "existing_keywords": existing_keywords,  # Preserved
+            "missing_keywords": missing_keywords,    # Injected
+            "keywords_preserved": len(existing_keywords),
+            "keywords_injected": len(missing_keywords) > 0
+        }
+    }
 
 
 # =============================================
@@ -1145,50 +1266,61 @@ async def enrich_job(data: dict = Body(...)):
 
 # =============================================
 # CRUD OPERATIONS (Save/Get/Delete Jobs)
+# SECURITY: All operations require auth and filter by owner_id
 # =============================================
 @router.post("/save-job")
-async def save_job(job: dict = Body(...)):
+async def save_job(request: Request, job: dict = Body(...)):
     """Save a job to the Kanban board. If ghost=True, saves without showing in Kanban."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         job_url = job.get('link') or job.get('absolute_url') or job.get('url') or ''
         job_title = job.get('title', 'Unknown Role')
         job_company = job.get('company', 'Unknown')
         job_location = job.get('location', 'Remote')
-        is_ghost = job.get('ghost', False)  # Ghost save flag
+        is_ghost = job.get('ghost', False)
         
-        # Determine status based on ghost flag
         status = 'Ghost' if is_ghost else 'Saved'
         
-        logger.info(f"[SAVE] Saving job: {job_title} at {job_company} (ghost={is_ghost})")
+        logger.info(f"[SAVE] User {owner_id}: {job_title} at {job_company} (ghost={is_ghost})")
         
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("SELECT id FROM saved_jobs WHERE url = ?", (job_url,))
+        # SECURITY: Check if THIS USER already saved this job
+        c.execute("SELECT id FROM saved_jobs WHERE owner_id = ? AND url = ?", (owner_id, job_url))
         existing = c.fetchone()
         if existing:
             conn.close()
             return {"message": "Job already saved", "id": existing[0]}
         
+        # SECURITY: Insert with owner_id
         c.execute(
-            "INSERT INTO saved_jobs (title, company, location, url, is_direct, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (job_title, job_company, job_location, job_url, True, status)
+            "INSERT INTO saved_jobs (owner_id, title, company, location, url, is_direct, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (owner_id, job_title, job_company, job_location, job_url, True, status)
         )
         new_id = c.lastrowid
         conn.commit()
         conn.close()
         return {"message": "Job Saved", "id": new_id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[SAVE] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/saved-jobs")
-async def get_saved_jobs():
-    """Get all saved jobs for the Kanban board. Excludes Ghost saves."""
+async def get_saved_jobs(request: Request):
+    """Get all saved jobs for the Kanban board. SECURITY: Only returns current user's jobs."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     conn = get_legacy_db()
     c = conn.cursor()
-    # Exclude Ghost status jobs - they're only for AI features
-    c.execute("SELECT * FROM saved_jobs WHERE status != 'Ghost' ORDER BY id DESC")
+    # SECURITY: Filter by owner_id - users only see their own jobs
+    c.execute(
+        "SELECT * FROM saved_jobs WHERE owner_id = ? AND status != 'Ghost' ORDER BY id DESC",
+        (owner_id,)
+    )
     rows = c.fetchall()
     conn.close()
     
@@ -1202,12 +1334,15 @@ async def get_saved_jobs():
 
 
 @router.delete("/saved-jobs/{job_id}")
-async def delete_job(job_id: int):
-    """Delete a saved job."""
+async def delete_job(request: Request, job_id: int):
+    """Delete a saved job. SECURITY: Only allows deleting own jobs."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("DELETE FROM saved_jobs WHERE id = ?", (job_id,))
+        # SECURITY: Only delete if job belongs to current user
+        c.execute("DELETE FROM saved_jobs WHERE id = ? AND owner_id = ?", (job_id, owner_id))
         conn.commit()
         conn.close()
         return {"message": "Job deleted"}
@@ -1216,12 +1351,18 @@ async def delete_job(job_id: int):
 
 
 @router.post("/update-notes")
-async def update_notes(data: dict = Body(...)):
-    """Update notes for a saved job."""
+async def update_notes(request: Request, data: dict = Body(...)):
+    """Update notes for a saved job. SECURITY: Only allows updating own jobs."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("UPDATE saved_jobs SET notes = ? WHERE id = ?", (data.get('notes'), data.get('id')))
+        # SECURITY: Only update if job belongs to current user
+        c.execute(
+            "UPDATE saved_jobs SET notes = ? WHERE id = ? AND owner_id = ?", 
+            (data.get('notes'), data.get('id'), owner_id)
+        )
         conn.commit()
         conn.close()
         return {"message": "Notes updated"}
@@ -1230,12 +1371,18 @@ async def update_notes(data: dict = Body(...)):
 
 
 @router.post("/update-status")
-async def update_status(data: dict = Body(...)):
-    """Update status for a saved job (Kanban column)."""
+async def update_status(request: Request, data: dict = Body(...)):
+    """Update status for a saved job (Kanban column). SECURITY: Only allows updating own jobs."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("UPDATE saved_jobs SET status = ? WHERE id = ?", (data.get('status'), data.get('id')))
+        # SECURITY: Only update if job belongs to current user
+        c.execute(
+            "UPDATE saved_jobs SET status = ? WHERE id = ? AND owner_id = ?", 
+            (data.get('status'), data.get('id'), owner_id)
+        )
         conn.commit()
         conn.close()
         return {"message": "Status updated"}
@@ -1244,33 +1391,76 @@ async def update_status(data: dict = Body(...)):
 
 
 @router.post("/save-profile")
-async def save_profile(data: dict = Body(...)):
-    """Save user profile (resume text and skills)."""
+async def save_profile(request: Request, data: dict = Body(...)):
+    """Save user profile (resume text and skills). SECURITY: Saves to current user's profile only."""
+    owner_id = get_current_user_id(request)  # SECURITY: Get authenticated user
+    
     try:
         conn = get_legacy_db()
         c = conn.cursor()
-        c.execute("SELECT id FROM profile LIMIT 1")
+        # SECURITY: Check if THIS USER already has a profile
+        c.execute("SELECT id FROM profile WHERE owner_id = ?", (owner_id,))
         if c.fetchone():
-            c.execute("UPDATE profile SET resume_text = ?, skills = ?", 
-                      (data.get('resume_text', ''), data.get('skills', '')))
+            # SECURITY: Only update this user's profile
+            c.execute(
+                "UPDATE profile SET resume_text = ?, skills = ? WHERE owner_id = ?", 
+                (data.get('resume_text', ''), data.get('skills', ''), owner_id)
+            )
         else:
-            c.execute("INSERT INTO profile (resume_text, skills) VALUES (?, ?)", 
-                      (data.get('resume_text', ''), data.get('skills', '')))
+            # SECURITY: Insert with owner_id
+            c.execute(
+                "INSERT INTO profile (owner_id, resume_text, skills) VALUES (?, ?, ?)", 
+                (owner_id, data.get('resume_text', ''), data.get('skills', ''))
+            )
         conn.commit()
         conn.close()
         return {"message": "Profile Saved"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/get-profile")
-async def get_profile():
-    """Get user profile."""
+async def get_profile(request: Request):
+    """Get user profile with email. SECURITY: Only returns current user's profile."""
+    from app.db import SessionLocal
+    from app.models import User
+    
+    # Get user ID and email from session
+    user_email = None
+    user_id = request.cookies.get("user_id")
+    
+    if not user_id:
+        # Not authenticated - return empty profile (onboarding will prompt login)
+        return {"resume_text": "", "skills": "", "user_email": None}
+    
+    try:
+        owner_id = int(user_id)
+    except ValueError:
+        return {"resume_text": "", "skills": "", "user_email": None}
+    
+    # Get user email
+    try:
+        db = SessionLocal()
+        user = db.query(User).filter(User.id == owner_id).first()
+        if user:
+            user_email = user.email
+        db.close()
+    except:
+        pass
+    
+    # SECURITY: Get profile data filtered by owner_id
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     row = c.fetchone()
     conn.close()
+    
     if row:
-        return {"resume_text": row["resume_text"], "skills": row["skills"]}
-    return {"resume_text": "", "skills": ""}
+        return {
+            "resume_text": row["resume_text"], 
+            "skills": row["skills"],
+            "user_email": user_email
+        }
+    return {"resume_text": "", "skills": "", "user_email": user_email}

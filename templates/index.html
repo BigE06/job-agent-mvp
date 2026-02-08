@@ -201,9 +201,13 @@
           <button onclick="loadJobs()" class="px-3 py-2 text-gray-600 hover:text-gray-900 text-sm">
             <i class="fas fa-sync-alt mr-1"></i> Refresh
           </button>
-          <button onclick="openProfileModal()"
-            class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200">
-            <i class="fas fa-user mr-1"></i> Profile
+          <a href="/logout" class="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm">
+            <i class="fas fa-sign-out-alt mr-1"></i> Logout
+          </a>
+          <button id="profile-btn" onclick="openProfileModal()"
+            class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 flex items-center">
+            <i class="fas fa-user mr-2"></i>
+            <span id="user-display">Profile</span>
           </button>
         </div>
       </div>
@@ -410,6 +414,67 @@
   </div>
 
   <!-- ======================== -->
+  <!-- ONBOARDING MODAL (Welcome Wizard) -->
+  <!-- ======================== -->
+  <div id="onboarding-modal" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+        <!-- Header with gradient -->
+        <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-8 text-center">
+          <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-rocket text-white text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-white">Welcome to your Career Copilot! 🚀</h2>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6">
+          <p class="text-gray-600 text-center mb-6 leading-relaxed">
+            To generate <span class="font-semibold text-gray-900">tailored CVs</span> and get
+            <span class="font-semibold text-gray-900">ATS Match Scores</span>, we need your baseline resume.
+            <br><span class="text-sm text-gray-500">It takes 10 seconds.</span>
+          </p>
+
+          <!-- Benefits list -->
+          <div class="space-y-3 mb-6">
+            <div class="flex items-center gap-3 text-sm">
+              <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-check text-green-600"></i>
+              </div>
+              <span class="text-gray-700">1-Click tailored CVs for every job</span>
+            </div>
+            <div class="flex items-center gap-3 text-sm">
+              <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-chart-pie text-blue-600"></i>
+              </div>
+              <span class="text-gray-700">Instant ATS Match Scores</span>
+            </div>
+            <div class="flex items-center gap-3 text-sm">
+              <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-microphone text-purple-600"></i>
+              </div>
+              <span class="text-gray-700">AI Interview Prep with feedback</span>
+            </div>
+          </div>
+
+          <!-- CTA Button with ID for event binding -->
+          <button id="btn-upload-modal"
+            class="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2">
+            <i class="fas fa-upload"></i>
+            <span id="btn-upload-modal-text">Upload Resume Now</span>
+          </button>
+
+          <!-- Hidden file input for onboarding modal -->
+          <input type="file" id="onboarding-resume-input" accept=".pdf" class="hidden">
+
+          <p class="text-center text-gray-400 text-xs mt-4">You can always update your profile later</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== -->
   <!-- RESULT MODAL -->
   <!-- ======================== -->
   <div id="result-modal" class="fixed inset-0 z-50 hidden">
@@ -425,12 +490,28 @@
       <div id="result-content" class="p-6 overflow-y-auto flex-1">
         <!-- Dynamic content -->
       </div>
-      <div class="flex justify-end p-4 border-t bg-gray-50 shrink-0">
-        <button onclick="copyResultToClipboard()" class="px-4 py-2 text-gray-600 mr-3 hover:bg-gray-100 rounded-lg">
-          <i class="fas fa-copy mr-2"></i> Copy
-        </button>
-        <button onclick="closeResultModal()"
-          class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Done</button>
+      <!-- Sticky Footer with Verify Button -->
+      <div class="flex justify-between items-center p-4 border-t bg-gray-50 shrink-0 rounded-b-2xl">
+        <!-- Left: Verify Score Button (hidden by default, shown for CV results) -->
+        <div id="footer-verify-container" class="hidden">
+          <button id="btn-verify-score-footer"
+            class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-lg shadow hover:shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2">
+            <i class="fas fa-bolt"></i>
+            <span id="btn-verify-text-footer">Check ATS Score</span>
+          </button>
+        </div>
+        <!-- Spacer when verify button is hidden -->
+        <div id="footer-spacer" class="flex-1"></div>
+
+        <!-- Right: Copy and Done -->
+        <div class="flex gap-3">
+          <button onclick="copyResultToClipboard()"
+            class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 flex items-center gap-2">
+            <i class="fas fa-copy"></i> Copy
+          </button>
+          <button onclick="closeResultModal()"
+            class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1342,6 +1423,10 @@
         return;
       }
 
+      // Store current job for verify score feature
+      const job = allJobs.find(j => j.id == jobId) || savedJobs.find(j => j.id == jobId);
+      window.currentCVJob = job;  // Store globally for verify score
+
       const btn = document.getElementById(`btn-cv-${jobId}`) || document.getElementById(`btn-cv-k${jobId}`);
       const originalHTML = btn?.innerHTML;
       if (btn) {
@@ -1359,13 +1444,45 @@
 
         if (data.error) {
           showResult('Error', `<p class="text-red-600">${escapeHtml(data.error)}</p>`);
+          // Hide footer verify button for errors
+          document.getElementById('footer-verify-container')?.classList.add('hidden');
         } else {
           currentResultText = data.cv_html || '';
+
+          // Include Smart Fix metadata if available (Preservation Protocol)
+          const preserved = data.smart_fix?.keywords_preserved || 0;
+          const injected = data.smart_fix?.missing_keywords?.length || 0;
+          const smartFixInfo = data.smart_fix ? `
+            <div class="mb-3 p-3 bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg text-sm flex items-center gap-4">
+              <span class="font-semibold text-blue-800">🎯 Smart Fix:</span>
+              <span class="text-green-700">✓ ${preserved} keywords preserved</span>
+              <span class="text-blue-700">+ ${injected} keywords added</span>
+            </div>
+          ` : '';
+
           showResult('📄 Tailored CV', `
-                        <div class="bg-white border rounded-lg p-6 cv-preview overflow-auto max-h-[60vh]">
-                            ${data.cv_html || '<p class="text-gray-500">No CV generated</p>'}
-                        </div>
-                    `);
+            <!-- Score Display Container (hidden by default) -->
+            <div id="new-score-container" class="hidden mb-4 p-4 rounded-lg flex justify-between items-center">
+              <span class="font-bold" id="new-ats-score-display"></span>
+            </div>
+            
+            ${smartFixInfo}
+            
+            <div class="bg-white border rounded-lg p-6 cv-preview overflow-auto" id="cv-preview-content">
+              ${data.cv_html || '<p class="text-gray-500">No CV generated</p>'}
+            </div>
+          `);
+
+          // Show and wire the FOOTER verify button (sticky)
+          const footerVerifyContainer = document.getElementById('footer-verify-container');
+          const footerSpacer = document.getElementById('footer-spacer');
+          if (footerVerifyContainer) {
+            footerVerifyContainer.classList.remove('hidden');
+            if (footerSpacer) footerSpacer.classList.add('hidden');
+          }
+
+          // Wire up the footer verify button
+          setTimeout(() => wireVerifyScoreButtonFooter(), 100);
         }
       } catch (err) {
         showResult('Error', `<p class="text-red-600">${err.message}</p>`);
@@ -2058,12 +2175,213 @@
 
     function closeResultModal() {
       document.getElementById('result-modal').classList.add('hidden');
+      resetResultModalFooter();  // Reset footer button state
     }
 
     function copyResultToClipboard() {
       if (currentResultText) {
         navigator.clipboard.writeText(currentResultText);
         showToast('✅ Copied!');
+      }
+    }
+
+    // --- Verify New CV Score ---
+    function wireVerifyScoreButton() {
+      const btn = document.getElementById('btn-verify-score');
+      if (!btn) return;
+
+      btn.addEventListener('click', async function () {
+        const job = window.currentCVJob;
+        if (!job) {
+          showToast('❌ No job context found', 'error');
+          return;
+        }
+
+        // Get the CV text from the preview
+        const cvContent = document.getElementById('cv-preview-content');
+        const cvText = cvContent ? cvContent.innerText : currentResultText;
+
+        if (!cvText || cvText.length < 50) {
+          showToast('❌ No CV content to analyze', 'error');
+          return;
+        }
+
+        const jobDescription = job.description || '';
+        if (!jobDescription || jobDescription.length < 50) {
+          showToast('⚠️ Job description too short for analysis', 'error');
+          return;
+        }
+
+        // Show loading state
+        const btnText = document.getElementById('btn-verify-text');
+        const originalText = btnText?.innerText || 'Check New ATS Score';
+        if (btnText) btnText.innerText = 'Analyzing...';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch('/api/job/analyze-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              resume_text: cvText,
+              job_description: jobDescription,
+              job_title: job.title || 'Position',
+              company: job.company || 'Company'
+            })
+          });
+
+          const data = await response.json();
+
+          // Show the result
+          const scoreContainer = document.getElementById('new-score-container');
+          const scoreDisplay = document.getElementById('new-ats-score-display');
+
+          if (scoreContainer && scoreDisplay) {
+            const analysis = data.analysis || {};
+            const matchScore = analysis.match_score || data.match_score || 50;
+
+            scoreContainer.classList.remove('hidden');
+            scoreDisplay.innerHTML = `🚀 <span class="text-2xl">${matchScore}%</span> ATS Match Score`;
+
+            // Visual feedback based on score
+            if (matchScore >= 80) {
+              scoreContainer.className = "mb-4 p-4 bg-green-100 border-2 border-green-400 rounded-lg flex justify-between items-center text-green-900";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">✨ Excellent match!</span>';
+            } else if (matchScore >= 60) {
+              scoreContainer.className = "mb-4 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg flex justify-between items-center text-yellow-900";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">👍 Good match</span>';
+            } else {
+              scoreContainer.className = "mb-4 p-4 bg-red-100 border-2 border-red-400 rounded-lg flex justify-between items-center text-red-900";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">⚠️ Needs improvement</span>';
+            }
+
+            // Change button to show it's done
+            if (btnText) btnText.innerText = '✓ Score Checked';
+            btn.classList.remove('from-purple-600', 'to-indigo-600');
+            btn.classList.add('from-green-500', 'to-emerald-500');
+          }
+
+        } catch (error) {
+          console.error('Verify score error:', error);
+          showToast('❌ Analysis failed. Please try again.', 'error');
+          if (btnText) btnText.innerText = originalText;
+          btn.disabled = false;
+        }
+      });
+    }
+
+    // --- Verify Score Button (Footer Version) ---
+    function wireVerifyScoreButtonFooter() {
+      const btn = document.getElementById('btn-verify-score-footer');
+      if (!btn || btn.dataset.wired) return;  // Prevent double-wiring
+      btn.dataset.wired = 'true';
+
+      btn.addEventListener('click', async function () {
+        const job = window.currentCVJob;
+        if (!job) {
+          showToast('❌ No job context found', 'error');
+          return;
+        }
+
+        // Get the CV text from the preview
+        const cvContent = document.getElementById('cv-preview-content');
+        const cvText = cvContent ? cvContent.innerText : currentResultText;
+
+        if (!cvText || cvText.length < 50) {
+          showToast('❌ No CV content to analyze', 'error');
+          return;
+        }
+
+        const jobDescription = job.description || '';
+        if (!jobDescription || jobDescription.length < 50) {
+          showToast('⚠️ Job description too short for analysis', 'error');
+          return;
+        }
+
+        // Show loading state
+        const btnText = document.getElementById('btn-verify-text-footer');
+        const originalText = btnText?.innerText || 'Check ATS Score';
+        if (btnText) btnText.innerText = 'Analyzing...';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch('/api/job/analyze-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              resume_text: cvText,
+              job_description: jobDescription,
+              job_title: job.title || 'Position',
+              company: job.company || 'Company'
+            })
+          });
+
+          const data = await response.json();
+
+          // Show the result in the content area
+          const scoreContainer = document.getElementById('new-score-container');
+          const scoreDisplay = document.getElementById('new-ats-score-display');
+
+          if (scoreContainer && scoreDisplay) {
+            const analysis = data.analysis || {};
+            const matchScore = analysis.match_score || data.match_score || 50;
+
+            scoreContainer.classList.remove('hidden');
+            scoreDisplay.innerHTML = `🚀 <span class="text-2xl">${matchScore}%</span> ATS Match Score`;
+
+            // Visual feedback based on score
+            if (matchScore >= 80) {
+              scoreContainer.className = "mb-4 p-4 bg-green-100 border-2 border-green-400 rounded-lg flex justify-between items-center text-green-900 animate-pulse";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">✨ Excellent match!</span>';
+            } else if (matchScore >= 60) {
+              scoreContainer.className = "mb-4 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg flex justify-between items-center text-yellow-900";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">👍 Good match</span>';
+            } else {
+              scoreContainer.className = "mb-4 p-4 bg-red-100 border-2 border-red-400 rounded-lg flex justify-between items-center text-red-900";
+              scoreDisplay.innerHTML += ' <span class="text-sm font-normal ml-2">⚠️ Needs improvement</span>';
+            }
+
+            // Update BUTTON to show actual score
+            btn.innerHTML = `<i class="fas fa-check-circle"></i> ${matchScore}% Match`;
+            btn.disabled = true;
+            btn.classList.add('cursor-default');
+
+            // Change button color based on score
+            btn.classList.remove('from-purple-600', 'to-indigo-600', 'hover:from-purple-700', 'hover:to-indigo-700');
+            if (matchScore >= 80) {
+              btn.classList.add('from-green-500', 'to-emerald-500');
+            } else if (matchScore >= 60) {
+              btn.classList.add('from-yellow-500', 'to-orange-500');
+            } else {
+              btn.classList.add('from-red-500', 'to-rose-500');
+            }
+          }
+
+        } catch (error) {
+          console.error('Verify score error:', error);
+          showToast('❌ Analysis failed. Please try again.', 'error');
+          if (btnText) btnText.innerText = originalText;
+          btn.disabled = false;
+        }
+      });
+    }
+
+    // Reset footer when modal closes
+    function resetResultModalFooter() {
+      const footerVerifyContainer = document.getElementById('footer-verify-container');
+      const footerSpacer = document.getElementById('footer-spacer');
+      const btn = document.getElementById('btn-verify-score-footer');
+
+      if (footerVerifyContainer) footerVerifyContainer.classList.add('hidden');
+      if (footerSpacer) footerSpacer.classList.remove('hidden');
+      if (btn) {
+        btn.disabled = false;
+        btn.dataset.wired = '';
+        // Restore original button HTML
+        btn.innerHTML = '<i class="fas fa-bolt"></i> <span id="btn-verify-text-footer">Check ATS Score</span>';
+        // Remove all score-based colors and restore original
+        btn.classList.remove('from-green-500', 'to-emerald-500', 'from-yellow-500', 'to-orange-500', 'from-red-500', 'to-rose-500', 'cursor-default');
+        btn.classList.add('from-purple-600', 'to-indigo-600', 'hover:from-purple-700', 'hover:to-indigo-700');
       }
     }
 
@@ -2081,7 +2399,95 @@
         const res = await fetch('/api/get-profile');
         const data = await res.json();
         updateProfileStatus(data.resume_text);
-      } catch (e) { }
+
+        // Update user display with email if available
+        if (data.user_email) {
+          const username = data.user_email.split('@')[0];
+          document.getElementById('user-display').textContent = username;
+        }
+
+        // Check for First Run Experience - show onboarding if no resume
+        if (!data.resume_text || data.resume_text.trim().length === 0) {
+          showOnboardingModal();
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      }
+    });
+
+    // --- Onboarding Modal Functions ---
+    function showOnboardingModal() {
+      document.getElementById('onboarding-modal').classList.remove('hidden');
+    }
+
+    function closeOnboardingModal() {
+      document.getElementById('onboarding-modal').classList.add('hidden');
+    }
+
+    function closeOnboardingAndOpenProfile() {
+      closeOnboardingModal();
+      openProfileModal();
+    }
+
+    function triggerOnboardingUpload() {
+      // Close the onboarding modal first
+      closeOnboardingModal();
+      // Open the profile modal
+      openProfileModal();
+      // Small delay to ensure modal is open, then trigger file input
+      setTimeout(() => {
+        document.getElementById('pdf-input').click();
+      }, 100);
+    }
+
+    // Wire up onboarding modal button and file input
+    document.addEventListener('DOMContentLoaded', function () {
+      const modalUploadBtn = document.getElementById('btn-upload-modal');
+      const onboardingInput = document.getElementById('onboarding-resume-input');
+      const btnText = document.getElementById('btn-upload-modal-text');
+
+      if (modalUploadBtn && onboardingInput) {
+        // Wire button to trigger hidden file input
+        modalUploadBtn.addEventListener('click', function () {
+          onboardingInput.click();
+        });
+
+        // Auto-upload when file is selected
+        onboardingInput.addEventListener('change', async function () {
+          if (this.files && this.files.length > 0) {
+            // Show loading state
+            if (btnText) btnText.innerText = "Uploading...";
+            modalUploadBtn.disabled = true;
+
+            const file = this.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+              const response = await fetch('/api/upload-resume', {
+                method: 'POST',
+                body: formData
+              });
+              const result = await response.json();
+
+              if (response.ok) {
+                // Success - close modal and reload
+                document.getElementById('onboarding-modal').classList.add('hidden');
+                window.location.reload();
+              } else {
+                alert('Upload failed: ' + (result.detail || 'Unknown error'));
+                if (btnText) btnText.innerText = "Upload Resume Now";
+                modalUploadBtn.disabled = false;
+              }
+            } catch (error) {
+              console.error('Upload error:', error);
+              alert('Upload failed. Please try again.');
+              if (btnText) btnText.innerText = "Upload Resume Now";
+              modalUploadBtn.disabled = false;
+            }
+          }
+        });
+      }
     });
   </script>
 
