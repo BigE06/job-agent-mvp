@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 def create_tables():
     logger.info("🚀 STARTUP: Checking/Creating database tables...")
     try:
+        # --- TEMPORARY FIX START ---
+        # ⚠️ UNCOMMENT THIS LINE FOR ONE DEPLOY ONLY to wipe the cloud DB
+        # Remove this line after successful schema rebuild!
+        Base.metadata.drop_all(bind=engine)
+        logger.info("🗑️ DROPPED all tables (temporary fix)")
+        # --- TEMPORARY FIX END ---
+        
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Tables created/verified successfully.")
     except Exception as e:
