@@ -185,13 +185,14 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
 # ANALYZE TEXT (Job Description Analysis)
 # =============================================
 @router.post("/analyze-text")
-async def analyze_text(data: dict = Body(...)):
+async def analyze_text(request: Request, data: dict = Body(...)):
     """Analyze a job description against user's profile."""
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_text = data.get('job_description', '')
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     profile = dict(profile_row) if profile_row else {}
     conn.close()
@@ -209,8 +210,9 @@ async def analyze_text(data: dict = Body(...)):
 # GENERATE COVER LETTER (NEW)
 # =============================================
 @router.post("/generate-cover-letter")
-async def generate_cover_letter(data: dict = Body(...)):
+async def generate_cover_letter(request: Request, data: dict = Body(...)):
     """Generate a professional cover letter for a job."""
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_id = data.get('job_id')
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
@@ -224,7 +226,7 @@ async def generate_cover_letter(data: dict = Body(...)):
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     profile = dict(profile_row) if profile_row else {}
     conn.close()
@@ -272,8 +274,9 @@ Generate a tailored cover letter as JSON."""
 # GENERATE COLD EMAIL (with auto-enrichment)
 # =============================================
 @router.post("/generate-cold-email")
-async def generate_cold_email(data: dict = Body(...)):
+async def generate_cold_email(request: Request, data: dict = Body(...)):
     """Generate a high-conversion cold email to a hiring manager."""
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_id = data.get('job_id')
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
@@ -287,7 +290,7 @@ async def generate_cold_email(data: dict = Body(...)):
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     profile = dict(profile_row) if profile_row else {}
     conn.close()
@@ -332,13 +335,14 @@ Generate the cold email as JSON."""
 # GENERATE CURATED CV (with Smart Fix Loop)
 # =============================================
 @router.post("/generate-curated-cv")
-async def generate_curated_cv(data: dict = Body(...)):
+async def generate_curated_cv(request: Request, data: dict = Body(...)):
     """
     Generate a tailored CV with Harvard Style CSS.
     Implements SMART FIX LOOP: Extract keywords → Find gaps → Force injection.
     """
     from app.services.ai import extract_jd_keywords, find_missing_keywords, build_keyword_injection_prompt
     
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_id = data.get('job_id')
     gap_answers = data.get('gap_answers', [])
     
@@ -351,7 +355,7 @@ async def generate_curated_cv(data: dict = Body(...)):
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     profile = dict(profile_row) if profile_row else {}
     conn.close()
@@ -508,8 +512,9 @@ CSS RULES (Harvard Style):
 # GAP FILL INTERVIEW (with auto-enrichment)
 # =============================================
 @router.post("/gap-fill-interview")
-async def gap_fill_interview(data: dict = Body(...)):
+async def gap_fill_interview(request: Request, data: dict = Body(...)):
     """Identify missing skills between resume and job description."""
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_id = data.get('job_id')
     if not job_id:
         raise HTTPException(status_code=400, detail="job_id is required")
@@ -523,7 +528,7 @@ async def gap_fill_interview(data: dict = Body(...)):
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     profile = dict(profile_row) if profile_row else {}
     conn.close()
@@ -568,15 +573,16 @@ Return JSON: {{"missing_skills": ["Skill1", "Skill2"], "job_title": "Title from 
 # GENERATE PACK (Cold Email + Strategy)
 # =============================================
 @router.post("/generate-pack")
-async def generate_pack(data: dict = Body(...)):
+async def generate_pack(request: Request, data: dict = Body(...)):
     """Generate a cold outreach email for a saved job."""
+    owner_id = get_current_user_id(request)  # SECURITY: Filter by authenticated user
     job_id = data.get('id')
     
     conn = get_legacy_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
+    c.execute("SELECT * FROM saved_jobs WHERE id = ? AND owner_id = ?", (job_id, owner_id))
     job_row = c.fetchone()
-    c.execute("SELECT * FROM profile LIMIT 1")
+    c.execute("SELECT * FROM profile WHERE owner_id = ?", (owner_id,))
     profile_row = c.fetchone()
     job = dict(job_row) if job_row else None
     profile = dict(profile_row) if profile_row else {}
