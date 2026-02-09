@@ -36,16 +36,23 @@ def create_tables():
     except Exception as e:
         logger.error(f"❌ Startup Error: {e}")
 
-# --- 2. SEEDING LOGIC ---
+# --- 2. SEEDING & AUDIT LOGIC ---
 def seed_initial_data():
-    logger.info("🌱 STARTUP: Checking if seeding is needed...")
+    logger.info("🌱 STARTUP: Checking database state...")
     db = SessionLocal()
     try:
         job_count = db.query(JobPost).count()
-        user_count = db.query(User).count()
-        logger.info(f"Database has {job_count} jobs and {user_count} users.")
+        users = db.query(User).all()
+        
+        # 📊 DATABASE AUDIT: Print all users to the console
+        logger.info(f"\n📊 DATABASE AUDIT: Found {len(users)} Users:")
+        for user in users:
+            logger.info(f"   - ID: {user.id} | Email: {user.email}")
+        logger.info(f"   Total Jobs: {job_count}")
+        logger.info("-------------------------------------------\n")
+        
     except Exception as e:
-        logger.error(f"⚠️ Seeding check failed: {e}")
+        logger.error(f"⚠️ Audit failed: {e}")
     finally:
         db.close()
 
